@@ -107,24 +107,18 @@ class TelegramController extends Controller
                 $textLower = strtolower($text);
 
                 // --- 📸 JIKA USER MENGIRIM GAMBAR BUKTI ---
+                // Simpan info gambar ke database user, jaga-jaga kalau dia kirim gambar duluan/belakangan
                 if (isset($message['photo'])) {
                     $photoArray = $message['photo'];
                     $bestPhoto = end($photoArray);
                     $fileId = $bestPhoto['file_id'];
 
-                    // Langsung teruskan gambar bukti ke Admin
-                    $botToken = env('TELEGRAM_BOT_TOKEN');
-                    Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
-                        'chat_id' => $adminId,
-                        'photo'   => $fileId,
-                        'caption' => "📸 <b>Bukti Gambar Masuk</b>\nDari User: {$name} (<code>{$telegramId}</code>)\n💬 Pesan teks: <i>\"" . ($text ?: 'Tidak ada teks') . "\"</i>",
-                        'parse_mode' => 'HTML'
-                    ]);
+                    // Update file_id gambar terbaru ke kolom username di tabel telegram_users (atau gunakan status jika tidak ada kolom khusus)
+                    $user->update(['username' => $fileId]); 
                 }
 
                 // --- INTERAKSI UTAMA /START ---
                 if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
-                    // Reset status ke none setiap start baru
                     $user->update(['status' => 'none']);
 
                     $tombolPaket = [
@@ -143,11 +137,10 @@ class TelegramController extends Controller
                 }
 
                 // ====================================================
-                // 🛠️ LOGIKA INPUT DATA LANGSUNG TANPA GROQ AI
+                // 🛠️ LOGIKA INPUT DATA LANGSUNG & TERUSKAN KE ADMIN
                 // ====================================================
                 if (in_array($user->status, ['waiting_tt', 'waiting_ig', 'waiting_fb']) && $text !== '') {
                     
-                    // Deteksi platform berdasarkan status tunggu user
                     $platformMapping = [
                         'waiting_tt' => 'tiktok',
                         'waiting_ig' => 'instagram',
@@ -157,7 +150,7 @@ class TelegramController extends Controller
                     $currentPlatform = $platformMapping[$user->status];
 
                     try {
-                        // 1. Langsung masukkan data akun mentah-mentah ke database social_accounts
+                        // 1. Masukkan data akun ke database social_accounts
                         \App\Models\SocialAccount::updateOrCreate(
                             ['telegram_id' => $telegramId, 'platform' => $currentPlatform],
                             ['username_sosmed' => $text, 'persona_slug' => 'zifazalina', 'joined_at' => now()]
@@ -168,19 +161,41 @@ class TelegramController extends Controller
                         $pesanSukses = "✅ <b>KONFIRMASI DIKIRIM!</b>\n\nData Akun Berhasil Dicatat:\n🌐 <b>Platform:</b> {$platformName}\n👤 <b>Nama Akun:</b> <code>{$text}</code>\n\n<i>Mohon tunggu sebentar ya, Kak. Tim Zifa akan segera memeriksa akun sosial media Anda untuk membuka akses grup! 🙏</i>";
                         $this->kirimPesan($chatId, $pesanSukses);
 
-                        // 3. Teruskan informasi lengkap langsung ke Admin
+                        // 3. Ambil data gambar jika ada yang tersimpan sebelumnya di profile user
+                        $savedPhotoId = (isset($message['photo'])) ? $fileId : $user->username;
+
+                        // Format pesan rangkuman untuk Telegram Admin
                         $pesanAdmin = "🛡️ <b>[NOTIFIKASI SOSMED BARU]</b>\n\n" .
                                       "👤 <b>Nama Tele:</b> {$name}\n" .
                                       "🆔 <b>ID Tele:</b> <code>{$telegramId}</code>\n" .
                                       "🌐 <b>Platform:</b> {$platformName}\n" .
                                       "📝 <b>Nama Akun Sosmed:</b> <code>{$text}</code>\n\n" .
                                       "⚙️ <i>Status: Menunggu validasi Anda di website admin.</i>";
-                        $this->kirimPesan($adminId, $pesanAdmin);
 
-                        // Reset status user kembali ke none agar tidak nyangkut
-                        $user->update(['status' => 'none']);
+                        // 4. 🔥 PROSES TEMBAK LANGSUNG KE ADMIN (ANTI-GAGAL)
+                        $botToken = env('TELEGRAM_BOT_TOKEN');
+
+                        // Jika ada gambar bukti (baik dikirim bersamaan maupun terpisah sebelumnya)
+                        if ($savedPhotoId && str_starts_with($savedPhotoId, 'AgAC')) { 
+                            Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
+                                'chat_id' => $adminId,
+                                'photo'   => $savedPhotoId,
+                                'caption' => $pesanAdmin,
+                                'parse_mode' => 'HTML'
+                            ]);
+                        } else {
+                            // Jika murni teks tanpa gambar
+                            $this->kirimPesan($adminId, $pesanAdmin);
+                        }
+
+                        // Reset status user \& username cadangan kembali normal
+                        $user->update([
+                            'status' => 'none',
+                            'username' => $from['username'] ?? null
+                        ]);
 
                     } catch (\Exception $e) {
+                        Log::error('Gagal Meneruskan ke Admin: ' . $e->getMessage());
                         $this->kirimPesan($chatId, "❌ <b>DATABASE ERROR!</b>\n\nGagal menyimpan data. Detail: <code>" . $e->getMessage() . "</code>");
                     }
                     
