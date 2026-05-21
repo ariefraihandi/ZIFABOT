@@ -13,6 +13,12 @@ return new class extends Migration
     {
         Schema::create('telegram_users', function (Blueprint $table) {
             $table->id();
+            $table->string('telegram_id')->unique(); // ID unik Telegram user
+            $table->string('username')->nullable();
+            $table->string('name')->nullable();
+            $table->string('role')->default('member'); // admin / member
+            $table->string('status')->default('none'); // active / expired / none
+            $table->timestamp('expired_at')->nullable(); // Masa aktif langganan
             $table->timestamps();
         });
     }
