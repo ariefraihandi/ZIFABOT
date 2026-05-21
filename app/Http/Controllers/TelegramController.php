@@ -77,7 +77,7 @@ class TelegramController extends Controller
 
                 $textLower = strtolower($text);
 
-                // --- 📸 JIKA USER MENGIRIM GAMBAR (LANGSUNG INPUT DB & TERUSKAN KE ADMIN TANPA AI) ---
+                // --- 📸 JIKA USER MENGIRIM GAMBAR ---
                 if (isset($message['photo'])) {
                     $photoArray = $message['photo'];
                     $bestPhoto = end($photoArray);
@@ -127,9 +127,8 @@ class TelegramController extends Controller
                 }
 
                 // ====================================================
-                // 🚀 MODE UTAMA: LANGSUNG AKTIFKAN SINKRONISASI GROQ AI
+                // 🚀 AMBIL ALIH TOTAL OLEH GROQ AI (ANTI-MENTAL)
                 // ====================================================
-                // Apapun isi teksnya, langsung diolah dan diinterpretasikan oleh Groq AI Cloud
                 $groqAnalysis = $this->analisisTeksDenganGroq($text);
 
                 if ($groqAnalysis && isset($groqAnalysis['is_valid_social_input']) && $groqAnalysis['is_valid_social_input'] === true) {
@@ -137,7 +136,7 @@ class TelegramController extends Controller
                     $usernameSosmed = $groqAnalysis['username_sosmed'];
 
                     try {
-                        // Masukkan data hasil terjemahan AI ke database social_accounts
+                        // Masukkan ke database social_accounts
                         \App\Models\SocialAccount::updateOrCreate(
                             ['telegram_id' => $telegramId, 'platform' => $inputPlatform],
                             ['username_sosmed' => $usernameSosmed, 'persona_slug' => 'zifazalina', 'joined_at' => now()]
@@ -157,27 +156,28 @@ class TelegramController extends Controller
                                       "⚙️ <i>Status: Menunggu validasi Anda di website admin.</i>";
                         $this->kirimPesan($adminId, $pesanAdmin);
 
+                        return response()->json(['status' => 'success'], 200);
+
                     } catch (\Exception $e) {
                         $this->kirimPesan($chatId, "⚠️ <b>DATABASE ERROR!</b>\n\nDetail Eror:\n<code>" . $e->getMessage() . "</code>");
+                        return response()->json(['status' => 'success'], 200);
                     }
-                } else {
-                    // Jika teks benar-benar percakapan kasual biasa / tidak mengandung identifikasi akun sama sekali
-                    $tombolPaket = [
-                        'inline_keyboard' => [
-                            [
-                                ['text' => '📦 Paket 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
-                                ['text' => '📦 Paket 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
-                            ],
-                            [
-                                ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
-                            ]
-                        ]
-                    ];
-                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini. Atau jika Anda sudah berlangganan di sosial media, silakan ketik nama akun dan platform Anda agar AI dapat mendatanya secara otomatis!\n\n<i>Contoh bebas: \"ig hayu kuya\" atau \"facebook akbar luis\"</i>";
-                    $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
                 }
-                
-                return response()->json(['status' => 'success'], 200);
+
+                // Jika Groq menilai chat ini benar-benar tidak mengandung unsur nama akun sama sekali, baru tampilkan pesan menu paket
+                $tombolPaket = [
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '📦 Paket 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
+                            ['text' => '📦 Paket 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
+                        ],
+                        [
+                            ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
+                        ]
+                    ]
+                ];
+                $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini. Atau jika Anda sudah berlangganan di sosial media, silakan ketik nama akun dan platform Anda agar AI dapat mendatanya secara otomatis!\n\n<i>Contoh: \"ig, roti_sari\" atau \"facebook akbar luis\"</i>";
+                $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
             }
         }
 
@@ -185,7 +185,7 @@ class TelegramController extends Controller
     }
 
     // ==========================================
-    // 🧠 PROMPT ENGINE GROQ CLOUD (SANGAT FLEKSIBEL)
+    // 🧠 PROMPT ENGINE GROQ CLOUD (SANGAT PRESISI)
     // ==========================================
     private function analisisTeksDenganGroq($userText)
     {
@@ -195,18 +195,19 @@ class TelegramController extends Controller
         }
 
         $systemPrompt = "You are a backend AI data extraction system. Your single task is to analyze raw chat from Telegram users who want to confirm their social media account subscription.\n" .
-                        "You must extract the PLATFORM (instagram, facebook, or tiktok) and the ACCOUNT NAME/USERNAME (can contain spaces, dots, or characters) and return a strict JSON object.\n\n" .
+                        "You must extract the PLATFORM (instagram, facebook, or tiktok) and the ACCOUNT NAME/USERNAME (can contain spaces, dots, underscores, commas, or characters) and return a strict JSON object.\n\n" .
                         "The JSON format MUST be exactly like this:\n" .
                         "{\n" .
                         "  \"is_valid_social_input\": true/false,\n" .
                         "  \"platform\": \"instagram\" or \"facebook\" or \"tiktok\",\n" .
-                        "  \"username_sosmed\": \"Extract the full account name or username here. Keep the spaces if the name has spaces.\"\n" .
+                        "  \"username_sosmed\": \"Extract the full account name or username here. Clean up any accidental leading or trailing commas or spaces.\"\n" .
                         "}\n\n" .
                         "Rules:\n" .
-                        "1. Normalize shortcuts: 'tt'/'tiktokan' -> 'tiktok', 'ig'/'insta' -> 'instagram', 'fb'/'facebook' -> 'facebook'.\n" .
-                        "2. If the user only provides an account name without explicitly mentioning the platform (e.g., \"akbar zikri\" or \"hayu kuya\"), guess the most logical platform or default it to \"facebook\", and set \"is_valid_social_input\" to true.\n" .
-                        "3. If the chat is completely unrelated to social media confirmation (e.g., greetings, general questions like \"how are you\"), set \"is_valid_social_input\" to false.\n" .
-                        "4. Output ONLY the raw JSON object. Do not include any markdown, backticks, or conversational text.";
+                        "1. Normalize shortcuts and common formats (even with commas, e.g., 'ig, roti_sari' or 'fb, budi'): 'tt'/'tiktokan' -> 'tiktok', 'ig'/'insta' -> 'instagram', 'fb'/'facebook' -> 'facebook'.\n" .
+                        "2. If the user writes a platform and account name separated by a comma or space (e.g., 'ig, roti_sari'), correctly isolate 'instagram' as the platform, and 'roti_sari' as the username_sosmed. Set 'is_valid_social_input' to true.\n" .
+                        "3. If the user only provides an account name without explicitly mentioning the platform (e.g., \"akbar zikri\"), default the platform to \"facebook\", and set \"is_valid_social_input\" to true.\n" .
+                        "4. If the chat is completely unrelated to social media confirmation (e.g., \"test\", \"p\", \"hello\"), set \"is_valid_social_input\" to false.\n" .
+                        "5. Output ONLY the raw JSON object. Do not include any markdown, backticks, or conversational text.";
 
         try {
             $response = Http::withHeaders([
@@ -234,7 +235,7 @@ class TelegramController extends Controller
     }
 
     // ==========================================
-    // LOGIKA INTEGRASI API IPAYMU & FUNGSI UTILITY
+    // UTILITY METHOD LAINNYA (IPAYMU & CHAT)
     // ==========================================
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
