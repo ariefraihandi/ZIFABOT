@@ -23,19 +23,18 @@ class TelegramController extends Controller
             $chatId = $callbackQuery['message']['chat']['id'];
             $callbackQueryId = $callbackQuery['id'];
             $name = $callbackQuery['from']['first_name'];
+            $telegramId = $callbackQuery['from']['id'];
 
             $this->answerCallbackQuery($callbackQueryId);
 
-            // Paket 1 Bulan
+            // Jika pilih Paket 1 Bulan
             if ($callbackData === 'paket_1_bulan') {
-                $pesan = "💳 <b>PILIHAN: PAKET 1 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 1 Bulan.\n\n💵 <b>Total Tagihan:</b> Rp 45.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
-                $this->kirimPesan($chatId, $pesan);
+                $this->prosesPembayaran($chatId, $name, 45000, 'Paket 1 Bulan', $telegramId);
             } 
             
-            // Paket 3 Bulan
+            // Jika pilih Paket 3 Bulan
             elseif ($callbackData === 'paket_3_bulan') {
-                $pesan = "💳 <b>PILIHAN: PAKET 3 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 3 Bulan.\n\n💵 <b>Total Tagihan:</b> Rp 120.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
-                $this->kirimPesan($chatId, $pesan);
+                $this->prosesPembayaran($chatId, $name, 120000, 'Paket 3 Bulan', $telegramId);
             } 
             
             // Tombol Sudah Berlangganan di Sosmed
@@ -93,24 +92,84 @@ class TelegramController extends Controller
                     $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 } 
                 
-                // DETEKSI FORMAT SOSMED (Mendukung format dengan koma 'fb,' atau spasi 'fb ')
                 elseif (str_starts_with($textLower, 'fb') || str_starts_with($textLower, 'ig') || str_starts_with($textLower, 'tiktok')) {
                     $pesanKonfirmasi = "mohon menunggu konfirmasi dari zifa untuk di tambahkan ke group ya.";
-                    
                     $this->kirimPesan($chatId, $pesanKonfirmasi);
-                    
                     Log::info("SOSMED SUBMISSION: User {$name} ({$chatId}) mengirimkan data: {$text}");
                 } 
                 
                 else {
                     $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan, ketik konfirmasi dengan format: <code>fb, nama akun fb</code>";
-                    
                     $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
                 }
             }
         }
 
         return response()->json(['status' => 'success'], 200);
+    }
+
+    // ==========================================
+    // 3. LOGIKA INTEGRASI API REDIRECT IPAYMU
+    // ==========================================
+    private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId)
+    {
+        $va = env('IPAYMU_VA');
+        $apiKey = env('IPAYMU_API_KEY');
+        $url = env('IPAYMU_URL');
+
+        // ID Unik Transaksi agar nanti saat iPaymu Callback, kita tahu siapa yang bayar
+        $referenceId = "ZIFABOT-" . $telegramId . "-" . time();
+
+        $body = [
+            'product'     => [$packageName],
+            'qty'         => ['1'],
+            'price'       => [(string)$amount],
+            'returnUrl'   => 'https://zifabot.bilikmedia.com/payment/success',
+            'cancelUrl'   => 'https://zifabot.bilikmedia.com/payment/cancel',
+            'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback', // Jalur Laporan iPaymu
+            'referenceId' => $referenceId,
+            'description' => "Langganan Premium Ziva Zalina"
+        ];
+
+        // Hitung Signature Keamanan Standar iPaymu v2 API
+        $jsonBody    = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $bodyHash    = strtolower(hash('sha256', $jsonBody));
+        $stringToSign = "POST\n" . $va . "\n" . $bodyHash . "\n" . $apiKey;
+        $signature   = hash_hmac('sha256', $stringToSign, $apiKey);
+
+        try {
+            // Tembak API iPaymu
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'va'           => $va,
+                'signature'    => $signature
+            ])->post($url, $body);
+
+            $resData = $response->json();
+
+            // Jika iPaymu Sukses Merespon (Status 200)
+            if (isset($resData['Status']) && $resData['Status'] == 200) {
+                $paymentUrl = $resData['Data']['Url'];
+
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN IPAYMU (SANDBOX)</b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
+                
+                $tombolBayar = [
+                    'inline_keyboard' => [
+                        [
+                            ['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]
+                        ]
+                    ]
+                ];
+
+                $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
+            } else {
+                Log::error('iPaymu Error: ', $resData);
+                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . ($resData['Message'] ?? 'Terjadi kesalahan internal iPaymu.'));
+            }
+        } catch (\Exception $e) {
+            Log::error('iPaymu Exception: ' . $e->getMessage());
+            $this->kirimPesan($chatId, "❌ Terjadi gangguan jaringan saat menghubungi server iPaymu.");
+        }
     }
 
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
