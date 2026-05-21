@@ -96,18 +96,15 @@
                                     <td class="fw-bold text-start px-3">{{ $account->telegram_name }}</td>
                                     <td><code>{{ $account->telegram_id }}</code></td>
                                     <td>
-                                        @if($account->platform == 'instagram') <span class="badge bg-danger">IG</span>
-                                        @elseif($account->platform == 'tiktok') <span class="badge bg-dark">TT</span>
+                                        @if($account->platform == 'instagram' || $account->platform == 'ig') <span class="badge bg-danger">IG</span>
+                                        @elseif($account->platform == 'tiktok' || $account->platform == 'tt') <span class="badge bg-dark">TT</span>
                                         @else <span class="badge bg-primary">FB</span> @endif
                                     </td>
                                     <td class="fw-bold text-primary text-start"><code>{{ $account->username_sosmed }}</code></td>
-                                    <td>{{ $account->joined_at }}</td>
+                                    <td>{{ \Carbon\Carbon::parse($account->joined_at)->format('Y-m-d') }}</td>
                                     <td>
                                         <div class="d-flex justify-content-center gap-1">
-                                            <form action="{{ route('social.validate', $account->id) }}" method="POST" onsubmit="return confirm('Validasi akun ini dan kirim link undangan?');">
-                                                @csrf
-                                                <button type="submit" class="btn btn-success btn-xs py-0 px-2 fw-bold text-white" style="font-size:11px;">Valid ✅</button>
-                                            </form>
+                                            <button type="button" class="btn btn-success btn-xs py-0 px-2 fw-bold text-white" style="font-size:11px;" data-bs-toggle="modal" data-bs-target="#validModal{{ $account->id }}">Valid ✅</button>
 
                                             <button type="button" class="btn btn-warning btn-xs py-0 px-2 fw-bold text-dark" style="font-size:11px;" data-bs-toggle="modal" data-bs-target="#editModal{{ $account->id }}">Edit 📝</button>
 
@@ -119,21 +116,51 @@
                                     </td>
                                 </tr>
 
-                                <div class="modal fade" id="editModal{{ $account->id }}" Jack-index="-1" aria-hidden="true">
+                                <div class="modal fade" id="validModal{{ $account->id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered modal-sm">
+                                        <div class="modal-content">
+                                            <form action="{{ route('social.validate', $account->id) }}" method="POST">
+                                                @csrf
+                                                <div class="modal-header bg-success text-white py-2">
+                                                    <h6 class="modal-title fw-bold">Konfirmasi Tanggal Masuk</h6>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body py-3 text-start">
+                                                    <p class="small text-muted mb-2">Tentukan tanggal masuk untuk menghitung otomatis tanggal expired (+30 hari) user ini.</p>
+                                                    <div class="mb-2">
+                                                        <label class="form-label small fw-bold">Tanggal Masuk</label>
+                                                        <input type="date" name="joined_at" class="form-control form-control-sm" value="{{ \Carbon\Carbon::parse($account->joined_at)->format('Y-m-d') }}" required>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer py-1">
+                                                    <button type="submit" class="btn btn-success btn-sm fw-bold w-100">Validasikan & Kirim Link</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="modal fade" id="editModal{{ $account->id }}" tabindex="-1" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered modal-sm">
                                         <div class="modal-content">
                                             <form action="{{ route('social.update', $account->id) }}" method="POST">
                                                 @csrf
                                                 <div class="modal-header bg-warning text-dark py-2">
-                                                    <h6 class="modal-title fw-bold">Koreksi Nama Akun</h6>
-                                                    <button type="button" class="btn-close" data-bs-toggle="modal" data-bs-dismiss="modal"></button>
+                                                    <h6 class="modal-title fw-bold">Koreksi Data Pengikut</h6>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                 </div>
-                                                <div class="modal-body py-3">
-                                                    <label class="form-label small fw-bold">Nama Akun Sosmed</label>
-                                                    <input type="text" name="username_sosmed" class="form-control" value="{{ $account->username_sosmed }}" required>
+                                                <div class="modal-body py-3 text-start">
+                                                    <div class="mb-2">
+                                                        <label class="form-label small fw-bold">Nama Akun Sosmed</label>
+                                                        <input type="text" name="username_sosmed" class="form-control form-control-sm" value="{{ $account->username_sosmed }}" required>
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label small fw-bold">Tanggal Masuk</label>
+                                                        <input type="date" name="joined_at" class="form-control form-control-sm" value="{{ \Carbon\Carbon::parse($account->joined_at)->format('Y-m-d') }}" required>
+                                                    </div>
                                                 </div>
                                                 <div class="modal-footer py-1">
-                                                    <button type="submit" class="btn btn-warning btn-sm fw-bold">Simpan Perubahan</button>
+                                                    <button type="submit" class="btn btn-warning btn-sm fw-bold w-100">Simpan Perubahan</button>
                                                 </div>
                                             </form>
                                         </div>

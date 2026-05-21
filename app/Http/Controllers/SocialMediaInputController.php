@@ -24,16 +24,25 @@ class SocialMediaInputController extends Controller
         return view('social_input', compact('slug', 'users', 'socialAccounts'));
     }
 
-    // 2. AKSI TOMBOL VALID (SET ACTIVE & EXPIRED)
-    public function validateAccount($id)
+    public function validateAccount(Request $request, $id)
     {
+        // Validasi input tanggal wajib diisi
+        $request->validate([
+            'joined_at' => 'required|date'
+        ]);
+
         $social = SocialAccount::findOrFail($id);
         
-        // Set expired 30 hari dari tanggal join sosmednya
-        $tanggalMasuk = Carbon::parse($social->joined_at);
-        $tanggalExpiredBaru = $tanggalMasuk->addDays(30);
+        // Ambil tanggal masuk dari input modal, bukan dari data lama
+        $tanggalMasuk = Carbon::parse($request->joined_at);
+        $tanggalExpiredBaru = $tanggalMasuk->copy()->addDays(30);
 
-        // Update data user di Telegram
+        // Update tanggal masuk di tabel social_accounts agar sinkron
+        $social->update([
+            'joined_at' => $request->joined_at
+        ]);
+
+        // Update status dan masa aktif user di tabel telegram_users
         $user = TelegramUser::where('telegram_id', $social->telegram_id)->first();
         if ($user) {
             $user->update([
@@ -42,7 +51,7 @@ class SocialMediaInputController extends Controller
                 'is_join' => true
             ]);
 
-            // Kirim link undangan otomatis ke user sebagai hadiah validasi sukses
+            // Kirim link undangan otomatis ke user
             $botToken = env('TELEGRAM_BOT_TOKEN');
             $groupId = env('TELEGRAM_GROUP_ID');
             $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
@@ -55,26 +64,30 @@ class SocialMediaInputController extends Controller
                 $link = $inviteData['result']['invite_link'];
                 Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                     'chat_id' => $social->telegram_id,
-                    'text' => "🎉 <b>KABAR GEMBIRA!</b>\n\nAkun " . strtoupper($social->platform) . " Anda dengan nama <b>{$social->username_sosmed}</b> telah VALID terdaftar di sistem kami.\n\nMasa aktif grup Anda diatur selama 30 hari.\n\n👇 Silakan klik tautan resmi di bawah ini untuk bergabung ke channel premium:\n👉 {$link}",
+                    'text' => "🎉 <b>KABAR GEMBIRA!</b>\n\nAkun " . strtoupper($social->platform) . " Anda dengan nama <b>{$social->username_sosmed}</b> telah VALID terdaftar di sistem kami.\n\nMasa aktif grup Anda dihitung 30 hari sejak tanggal masuk (" . $tanggalMasuk->format('d-m-Y') . ").\n\n👇 Silakan klik tautan resmi di bawah ini untuk bergabung:\n👉 {$link}",
                     'parse_mode' => 'HTML'
                 ]);
             }
         }
 
-        return redirect()->back()->with('success', 'Akun pengikut berhasil divalidasi dan tautan undangan telah dikirim!');
+        return redirect()->back()->with('success', 'Akun berhasil divalidasi, Tanggal Masuk & Expired telah diperbarui ke database Telegram!');
     }
 
-    // 3. AKSI TOMBOL EDIT KOREKSI
+    // 3. AKSI TOMBOL EDIT KOREKSI (NAMA & TANGGAL MASUK)
     public function updateAccount(Request $request, $id)
     {
-        $request->validate(['username_sosmed' => 'required|string']);
+        $request->validate([
+            'username_sosmed' => 'required|string',
+            'joined_at' => 'required|date'
+        ]);
         
         $social = SocialAccount::findOrFail($id);
         $social->update([
-            'username_sosmed' => $request->username_sosmed
+            'username_sosmed' => $request->username_sosmed,
+            'joined_at' => $request->joined_at
         ]);
 
-        return redirect()->back()->with('success', 'Nama akun sosial media berhasil dikoreksi!');
+        return redirect()->back()->with('success', 'Nama akun dan tanggal masuk berhasil dikoreksi!');
     }
 
     // 4. AKSI TOMBOL REJECT (NAMA TIDAK DITEMUKAN)
