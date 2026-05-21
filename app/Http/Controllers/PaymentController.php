@@ -31,34 +31,33 @@ class PaymentController extends Controller
                 $user = TelegramUser::where('telegram_id', $telegramId)->first();
                 
                 // ====================================================
-                // LOGIKA BARU: CEK ID TELE SUDAH ADA DI DB ATAU BELUM
+                // LOGIKA: CEK & SETELISASI AWAL IS_JOIN = NULL
                 // ====================================================
                 if (!$user) {
-                    // JIKA BELUM ADA: Submit / Buat data baru ke DB
+                    // JIKA BELUM ADA: Buat data baru, is_join diset null di awal
                     $user = TelegramUser::create([
                         'telegram_id' => $telegramId,
                         'name'        => $request->input('buyer_name') ?? 'Pelanggan Premium',
                         'username'    => null,
                         'role'        => 'member',
                         'status'      => 'paid',
+                        'is_join'     => null, // 🛠️ Set awal null sesuai permintaan
                         'expired_at'  => now()->addMonths($months)
                     ]);
                 } else {
-                    // JIKA SUDAH ADA: Update tanggal expired & status
-                    // Cek jika expired_at lama masih aktif di masa depan, akumulasikan dari tanggal itu. 
-                    // Jika sudah lewat/kedaluwarsa, hitung baru dari tanggal hari ini (now()).
+                    // JIKA SUDAH ADA: Update tanggal expired, kembalikan is_join ke null untuk sesi baru
                     $baseExpiredDate = ($user->expired_at && Carbon::parse($user->expired_at)->isFuture()) 
                         ? Carbon::parse($user->expired_at) 
                         : now();
 
                     $user->update([
                         'status'     => 'paid',
+                        'is_join'    => null, // 🛠️ Set awal null saat pembayaran baru masuk
                         'expired_at' => $baseExpiredDate->addMonths($months)
                     ]);
                 }
                 // ====================================================
 
-                // SETELAH DATA AMAN DI DB, BARU PROSES PESAN DAN COBA GENERATE LINK
                 $botToken = env('TELEGRAM_BOT_TOKEN');
                 $groupId = env('TELEGRAM_GROUP_ID');
 
@@ -85,9 +84,13 @@ class PaymentController extends Controller
                     }
                 }
 
-                // 4. Jika terdeteksi sudah bergabung
+                // 4. Jika terdeteksi sudah bergabung (Perpanjang masa aktif)
                 if ($alreadyJoined) {
-                    $user->update(['status' => 'active']);
+                    // Update status jadi active dan is_join menjadi true (1)
+                    $user->update([
+                        'status'  => 'active',
+                        'is_join' => true
+                    ]);
 
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                         'chat_id' => $telegramId,
@@ -96,7 +99,7 @@ class PaymentController extends Controller
                     ]);
                 } 
                 
-                // 5. Jika belum bergabung -> Generate tautan undangan baru
+                // 5. Jika belum bergabung -> Generate tautan undangan baru (is_join tetap null)
                 else {
                     $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
                         'chat_id' => $groupId,

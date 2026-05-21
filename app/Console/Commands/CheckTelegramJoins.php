@@ -14,7 +14,7 @@ class CheckTelegramJoins extends Command
 
     public function handle()
     {
-        // Ambil semua user yang statusnya 'paid' (Sudah bayar tapi belum masuk channel)
+        // Ambil semua user yang statusnya 'paid' (Sudah bayar tapi belum terkonfirmasi join)
         $users = TelegramUser::where('status', 'paid')->get();
         
         $botToken = env('TELEGRAM_BOT_TOKEN');
@@ -35,17 +35,20 @@ class CheckTelegramJoins extends Command
                 // Jika statusnya terdeteksi sudah masuk (member, administrator, atau creator)
                 if (in_array($memberStatus, ['member', 'administrator', 'creator'])) {
                     
-                    // Ubah status di DB menjadi 'active' agar berhenti dikirimi notifikasi reminder
-                    $user->update(['status' => 'active']);
+                    // 🛠️ UPDATE DB: Ubah status menjadi 'active' DAN set is_join menjadi true
+                    $user->update([
+                        'status'  => 'active',
+                        'is_join' => true
+                    ]);
 
-                    // Kirim ucapan selamat bergabung
+                    // Kirim ucapan selamat bergabung (Tanpa mengirim ulang tautan undangan)
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                         'chat_id' => $user->telegram_id,
                         'text' => "🥳 <b>Selamat bergabung ya!</b>\n\nSekarang kamu sudah resmi menjadi bagian dari channel premium Ziva Zalina. Selamat menikmati konten eksklusif kami! ✨",
                         'parse_mode' => 'HTML'
                     ]);
                 } else {
-                    // Jika statusnya masih 'left' (belum bergabung), kirim notifikasi pengingat
+                    // Jika statusnya masih 'left' (belum bergabung), cukup kirim notifikasi pengingat saja
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                         'chat_id' => $user->telegram_id,
                         'text' => "🔔 <b>Ingat ya!</b>\n\nJangan lupa bergabung ya melalui tautan undangan yang sudah dikirim sebelumnya! 🙏",
