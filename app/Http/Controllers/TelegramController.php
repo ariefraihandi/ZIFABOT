@@ -64,6 +64,7 @@ class TelegramController extends Controller
                 $username = $from['username'] ?? null;
                 $name = $from['first_name'] . (isset($from['last_name']) ? ' ' . $from['last_name'] : '');
 
+                // 1. Daftarkan user ke tabel telegram_users jika belum ada
                 $user = TelegramUser::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     ['username' => $username, 'name' => $name, 'role' => ($telegramId == env('TELEGRAM_SUPER_ADMIN_ID')) ? 'admin' : 'member', 'status' => 'none']
@@ -83,7 +84,7 @@ class TelegramController extends Controller
 
                 $textLower = strtolower($text);
 
-                // FITUR BACKDOOR (Bisa kamu abaikan/hapus nanti)
+                // --- BACKDOOR TEST BAYAR ---
                 if ($text === '/testbayar') {
                     $user->update(['status' => 'paid', 'expired_at' => now()->addMonth()]);
                     $this->kirimPesan($chatId, "🎉 <b>Selamat Pembayaran Anda Berhasil!</b>\n\nmohon tunggu saya akan membuat tautan undangan spesial untuk anda.");
@@ -99,18 +100,54 @@ class TelegramController extends Controller
                     return response()->json(['status' => 'success'], 200);
                 }
 
+                // --- A. JIKA USER BERINTERAKSI AWAL ---
                 if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
                     $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
                     $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 } 
                 
-                elseif (str_starts_with($textLower, 'fb') || str_starts_with($textLower, 'ig') || str_starts_with($textLower, 'tiktok')) {
-                    $pesanKonfirmasi = "mohon menunggu konfirmasi dari zifa untuk di tambahkan ke group ya.";
-                    $this->kirimPesan($chatId, $pesanKonfirmasi);
+                // --- B. 🛠️ JIKA USER INPUT FORM KONFIRMASI SOSMED ---
+                elseif (str_starts_with($textLower, 'fb') || str_starts_with($textLower, 'ig') || str_starts_with($textLower, 'tiktok') || str_starts_with($textLower, 'tt')) {
+                    
+                    // Memecah teks user berdasarkan tanda koma (Contoh input: fb, Budi Sudarsono)
+                    $parts = explode(',', $text);
+                    
+                    // Validasi: Harus ada tanda koma dan ada isi nama akun setelah koma
+                    if (count($parts) >= 2) {
+                        $inputPlatform = trim(strtolower($parts[0])); // Mengambil platform ('fb', 'ig', dst)
+                        $usernameSosmed = trim($parts[1]);          // Mengambil nama akun sosmednya
+
+                        // Normalisasi tulisan 'tt' agar tersimpan sebagai 'tiktok' di database
+                        if ($inputPlatform === 'tt') { 
+                            $inputPlatform = 'tiktok'; 
+                        }
+
+                        // 🔥 OTOMATIS BULK INPUT/UPDATE KE TABEL social_accounts
+                        \App\Models\SocialAccount::updateOrCreate(
+                            [
+                                'telegram_id'  => $telegramId,
+                                'platform'     => $inputPlatform
+                            ],
+                            [
+                                'username_sosmed' => $usernameSosmed,
+                                'persona_slug'    => 'zifazalina', // Mengidentifikasi grup/persona Zifa
+                                'joined_at'       => now()         // Tanggal masuk default diatur hari ini
+                            ]
+                        );
+
+                        // Kirim pesan sukses ke user tanpa link pembayaran/invite
+                        $pesanKonfirmasi = "✅ <b>Data Berhasil Dicatat!</b>\n\nAkun <b>" . strtoupper($inputPlatform) . "</b> dengan nama: <code>{$usernameSosmed}</code> telah berhasil dimasukkan ke sistem data pengikut.\n\nMohon tunggu sebentar ya, Kak. Tim Zifa akan segera memeriksa akun sosial media Kakak untuk verifikasi akhir! 🙏";
+                        $this->kirimPesan($chatId, $pesanKonfirmasi);
+                    } else {
+                        // Jika user mengetik singkat tanpa format koma yang jelas (misal cuma ngetik "fb")
+                        $pesanFormatGagal = "❌ <b>Format Salah!</b>\n\nSilakan ketik ulang konfirmasi Anda dengan menggunakan tanda koma seperti contoh berikut:\n\n<code>fb, nama akun facebook kamu</code>\natau\n<code>ig, username instagram kamu</code>";
+                        $this->kirimPesan($chatId, $pesanFormatGagal);
+                    }
                 } 
                 
+                // --- C. JIKA USER MENGETIK CHAT BIASA/LAINNYA ---
                 else {
-                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan, ketik konfirmasi dengan format: <code>fb, nama akun fb</code>";
+                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan di sosial media, ketik konfirmasi dengan format:\n\n<code>fb, nama akun fb</code>";
                     $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
                 }
             }
@@ -160,12 +197,7 @@ class TelegramController extends Controller
 
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'] ?? '';
-                
-                // 🛠️ TANGKAP SESSION ID & TRANSACTION ID ASLI DARI RESPONS IPAYMU
-                $ipaymuSessionId = $resData['Data']['SessionID'] ?? 'Tidak Ada';
-                $ipaymuTrxId     = $resData['Data']['TransactionID'] ?? 'Tidak Ada';
 
-                // Tampilkan semua ID di dalam pesan untuk memudahkan simulasi manual
                 $pesanTagihan = "💳 <b>NOTA TAGIHAN BERLANGGANAN ZIFA </b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n" .                                
                                 "📦 <b>Produk:</b> {$packageName}\n" .
                                 "💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n" .
