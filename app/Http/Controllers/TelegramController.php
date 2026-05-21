@@ -160,11 +160,13 @@ class TelegramController extends Controller
                         $savedPhotoId = (isset($message['photo'])) ? $fileId : $user->username;
 
                         // Format template pesan untuk Telegram Admin
+                        // Ganti baris $pesanAdmin di TelegramController.php Kakak dengan format ini:
                         $pesanAdmin = "📢 <b>[NOTIFIKASI ASISTEN BOT]</b>\n\n" .
-                                      "Hi min, ada member baru ngaku-ngaku udah daftar di <b>{$platformName}</b> dengan nama <code>{$text}</code>.\n\n" .
-                                      "👤 <b>Nama Tele User:</b> {$name}\n" .
-                                      "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n\n" .
-                                      "Tolong di cek dong. aku tunggu ya miiin! 🦾";
+                                    "Hi min, ada member baru ngaku-ngaku udah daftar di <b>{$platformName}</b> dengan nama <code>{$text}</code>.\n\n" .
+                                    "👤 <b>Nama Tele User:</b> {$name}\n" .
+                                    "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n\n" .
+                                    "🔗 <b>Cek Sekarang:</b> https://zifabot.bilikmedia.com/input/zifazalina\n\n" .
+                                    "Tolong di cek dong. aku tunggu ya miiin! 🦾";
 
                         $botToken = env('TELEGRAM_BOT_TOKEN');
 

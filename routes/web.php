@@ -13,10 +13,13 @@ Route::post('/ipaymu/callback', [PaymentController::class, 'callback']);
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/input/{slug}', [SocialMediaInputController::class, 'showForm'])->name('social.form');
-    Route::get('/satpam/sync-channel', [SatpamBotController::class, 'syncMembers'])->name('satpam.sync');
-    
     Route::post('/input/{slug}/save', [SocialMediaInputController::class, 'saveData'])->name('social.save');
-    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    
+    // 🛠️ Rute Aksi Tabel Operator
+    Route::post('/social/validate/{id}', [SocialMediaInputController::class, 'validateAccount'])->name('social.validate');
+    Route::post('/social/update/{id}', [SocialMediaInputController::class, 'updateAccount'])->name('social.update');
+    Route::post('/social/reject/{id}', [SocialMediaInputController::class, 'rejectAccount'])->name('social.reject');
+    
 });
 
 // 🔓 RUTE PUBLIK (Halaman Login)
