@@ -1,33 +1,26 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+namespace App\Models;
 
-return new class extends Migration
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class TelegramUser extends Model
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
-    {
-        Schema::create('telegram_users', function (Blueprint $table) {
-            $table->id();
-            $table->bigInteger('telegram_id')->unique(); // ID Unik Telegram User
-            $table->string('username')->nullable();     // Username Telegram (@username)
-            $table->string('name');                      // Nama Akun Telegram
-            $table->enum('role', ['admin', 'member'])->default('member'); // Hak Akses
-            $table->enum('status', ['active', 'expired', 'none'])->default('none'); // Status Langganan
-            $table->timestamp('expired_at')->nullable(); // Tanggal Kedaluwarsa
-            $table->timestamps();
-        });
-    }
+    use HasFactory;
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('telegram_users');
-    }
-};
+    protected $table = 'telegram_users';
+
+    protected $fillable = [
+        'telegram_id',
+        'username',
+        'name',
+        'role',
+        'status',
+        'expired_at',
+    ];
+
+    protected $casts = [
+        'expired_at' => 'datetime',
+    ];
+}
