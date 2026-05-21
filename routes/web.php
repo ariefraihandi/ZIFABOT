@@ -20,6 +20,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/social/update/{id}', [SocialMediaInputController::class, 'updateAccount'])->name('social.update');
     Route::post('/social/reject/{id}', [SocialMediaInputController::class, 'rejectAccount'])->name('social.reject');
     
+    Route::get('/logout', [AuthController::class, 'showLogin'])->name('logout');
 });
 
 // 🔓 RUTE PUBLIK (Halaman Login)
