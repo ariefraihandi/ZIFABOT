@@ -17,7 +17,8 @@ class TelegramUser extends Model
         'name',
         'role',
         'status',
-        'expired_at',
+        'is_join', // Tambahkan ini
+        'expired_at'
     ];
 
     protected $casts = [

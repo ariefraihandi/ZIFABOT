@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('name')->nullable();
             $table->string('role')->default('member'); // admin / member
             $table->string('status')->default('none'); // active / expired / none
+            $table->boolean('is_join')->default(false); // KOLOM BARU: true = sudah masuk channel, false = belum
             $table->timestamp('expired_at')->nullable(); // Masa aktif langganan
             $table->timestamps();
         });
