@@ -156,9 +156,13 @@ class TelegramController extends Controller
                             ['username_sosmed' => $text, 'persona_slug' => 'zifazalina', 'joined_at' => now()]
                         );
 
-                        // Tarik data gambar pendukung jikalau ada
-                        $savedPhotoId = (isset($message['photo'])) ? $fileId : $user->username;
-
+                        // 2. 🌟 PERBAIKAN: Cek gambar dari status yang kita titipkan tadi
+                        $savedPhotoId = null;
+                        if (isset($message['photo'])) {
+                            $savedPhotoId = $fileId;
+                        } elseif (str_starts_with($user->status, 'photo_')) {
+                            $savedPhotoId = str_replace('photo_', '', $user->status);
+                        }
                         // Format template pesan untuk Telegram Admin
                         // Ganti baris $pesanAdmin di TelegramController.php Kakak dengan format ini:
                         $pesanAdmin = "📢 <b>[NOTIFIKASI ASISTEN BOT]</b>\n\n" .
