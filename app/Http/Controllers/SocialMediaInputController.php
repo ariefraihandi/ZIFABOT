@@ -38,17 +38,15 @@ class SocialMediaInputController extends Controller
         $tanggalExpiredBaru = $tanggalMasuk->copy()->addDays(30);
 
         // Update tanggal masuk di tabel social_accounts agar sinkron
-        $social->update([
-            'joined_at' => $request->joined_at
-        ]);
+        $social->delete();
 
         // Update status dan masa aktif user di tabel telegram_users
         $user = TelegramUser::where('telegram_id', $social->telegram_id)->first();
         if ($user) {
             $user->update([
-                'status' => 'active',
+                'status' => 'paid',
                 'expired_at' => $tanggalExpiredBaru,
-                'is_join' => true
+                'is_join' => false
             ]);
 
             // Kirim link undangan otomatis ke user
@@ -82,12 +80,33 @@ class SocialMediaInputController extends Controller
         ]);
         
         $social = SocialAccount::findOrFail($id);
-        $social->update([
-            'username_sosmed' => $request->username_sosmed,
-            'joined_at' => $request->joined_at
+        
+        // 1. Hitung masa expired (30 hari dari tanggal join yang baru diinput)
+        $tanggalMasuk = \Carbon\Carbon::parse($request->joined_at);
+        $tanggalExpiredBaru = $tanggalMasuk->copy()->addDays(30);
+
+        // 2. Update data ke tabel TelegramUser agar user masuk ke antrean 'paid'
+        $user = TelegramUser::where('telegram_id', $social->telegram_id)->first();
+        if ($user) {
+            $user->update([
+                'status' => 'paid',      // 👈 Status 'paid' agar diproses Cron Job
+                'expired_at' => $tanggalExpiredBaru,
+                'is_join' => false       // 👈 False agar bot terus mengingatkan user untuk join
+            ]);
+        }
+
+        // 3. Hapus dari tabel SocialAccount (Request) karena sudah dipindahkan ke TelegramUser
+        $social->delete();
+
+        // 4. (Opsional) Kirim notifikasi ke User bahwa datanya sudah dikoreksi & divalidasi Admin
+        $botToken = env('TELEGRAM_BOT_TOKEN');
+        Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+            'chat_id' => $social->telegram_id,
+            'text' => "✅ <b>DATA TERVERIFIKASI!</b>\n\nAdmin telah mengoreksi dan memvalidasi data Anda.\n\nSilakan cek tautan undangan grup yang sudah kami kirim sebelumnya untuk bergabung. Jika belum ada, segera hubungi Admin!",
+            'parse_mode' => 'HTML'
         ]);
 
-        return redirect()->back()->with('success', 'Nama akun dan tanggal masuk berhasil dikoreksi!');
+        return redirect()->back()->with('success', 'Data berhasil dikoreksi dan user dipindahkan ke status PAID untuk validasi grup!');
     }
 
     // 4. AKSI TOMBOL REJECT (NAMA TIDAK DITEMUKAN)
