@@ -13,13 +13,16 @@ return new class extends Migration
     {
         Schema::create('telegram_users', function (Blueprint $table) {
             $table->id();
-            $table->string('telegram_id')->unique(); // ID unik Telegram user
+            $table->string('telegram_id')->unique();
             $table->string('username')->nullable();
             $table->string('name')->nullable();
-            $table->string('role')->default('member'); // admin / member
-            $table->string('status')->default('none'); // active / expired / none
-            $table->boolean('is_join')->default(false); // KOLOM BARU: true = sudah masuk channel, false = belum
-            $table->timestamp('expired_at')->nullable(); // Masa aktif langganan
+            $table->string('role')->default('member');
+            $table->string('status')->default('none');
+            
+            // 🛠️ PERBAIKAN: Ditambah ->nullable() agar MySQL mau menerima nilai NULL di awal
+            $table->boolean('is_join')->nullable()->default(null); 
+            
+            $table->timestamp('expired_at')->nullable();
             $table->timestamps();
         });
     }
