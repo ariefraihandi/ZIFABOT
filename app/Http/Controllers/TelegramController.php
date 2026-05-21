@@ -128,28 +128,28 @@ class TelegramController extends Controller
             'cancelUrl'   => 'https://zifabot.bilikmedia.com/payment/cancel',
             'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback',
             'referenceId' => $referenceId,
-            'description' => "Langganan Premium Ziva Zalina"
+            'description' => ["Langganan Premium Ziva Zalina"] // SOLUSI: Dibungkus array [] sesuai request API
         ];
 
-        // 1. Generate JSON Body (Jangan ubah ini)
+        // 1. Generate JSON Body
         $jsonBody     = json_encode($body, JSON_UNESCAPED_SLASHES);
         $requestBody  = strtolower(hash('sha256', $jsonBody));
         
-        // 2. Rumus Signature Baru (Menggunakan Titik Dua sesuai dokumentasimu)
+        // 2. Rumus Signature
         $stringToSign = 'POST:' . $va . ':' . $requestBody . ':' . $apiKey;
         $signature    = hash_hmac('sha256', $stringToSign, $apiKey);
         
-        // 3. Wajib Ambil Timestamp saat ini
+        // 3. Timestamp
         $timestamp    = date('YmdHis');
 
         try {
-            // Tembak API iPaymu dengan Header Lengkap
+            // Tembak API iPaymu
             $response = Http::withHeaders([
                 'Accept'       => 'application/json',
                 'Content-Type' => 'application/json',
                 'va'           => $va,
                 'signature'    => $signature,
-                'timestamp'    => $timestamp // Menyertakan waktu request
+                'timestamp'    => $timestamp
             ])->withBody($jsonBody, 'application/json')->post($url);
 
             $resData = $response->json();
@@ -171,8 +171,6 @@ class TelegramController extends Controller
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
                 Log::error('iPaymu Error: ', $resData ?? []);
-                
-                // Menampilkan alasan detail kegagalan dari response iPaymu
                 $errorMsg = $resData['Message'] ?? 'Terjadi kesalahan internal iPaymu.';
                 $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . $errorMsg);
             }
