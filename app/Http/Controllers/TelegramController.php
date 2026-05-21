@@ -166,10 +166,7 @@ class TelegramController extends Controller
                 $ipaymuTrxId     = $resData['Data']['TransactionID'] ?? 'Tidak Ada';
 
                 // Tampilkan semua ID di dalam pesan untuk memudahkan simulasi manual
-                $pesanTagihan = "💳 <b>NOTA TAGIHAN IPAYMU (SANDBOX)</b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n" .
-                                "🔑 <b>iPaymu Session ID:</b> <code>{$ipaymuSessionId}</code> (Gunakan ini di Simulator!)\n" .
-                                "🆔 <b>iPaymu Trx ID:</b> <code>{$ipaymuTrxId}</code>\n" .
-                                "📝 <b>Merchant Ref ID:</b> <code>{$referenceId}</code>\n" .
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN BERLANGGANAN ZIFA </b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n" .                                
                                 "📦 <b>Produk:</b> {$packageName}\n" .
                                 "💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n" .
                                 "👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
