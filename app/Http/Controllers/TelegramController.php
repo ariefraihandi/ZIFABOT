@@ -131,17 +131,25 @@ class TelegramController extends Controller
             'description' => "Langganan Premium Ziva Zalina"
         ];
 
-        // Mengunci format JSON agar tidak diacak-acak kembali oleh Laravel
-        $jsonBody     = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $bodyHash     = strtolower(hash('sha256', $jsonBody));
-        $stringToSign = "POST\n" . $va . "\n" . $bodyHash . "\n" . $apiKey;
+        // 1. Generate JSON Body (Jangan ubah ini)
+        $jsonBody     = json_encode($body, JSON_UNESCAPED_SLASHES);
+        $requestBody  = strtolower(hash('sha256', $jsonBody));
+        
+        // 2. Rumus Signature Baru (Menggunakan Titik Dua sesuai dokumentasimu)
+        $stringToSign = 'POST:' . $va . ':' . $requestBody . ':' . $apiKey;
         $signature    = hash_hmac('sha256', $stringToSign, $apiKey);
+        
+        // 3. Wajib Ambil Timestamp saat ini
+        $timestamp    = date('YmdHis');
 
         try {
-            // SOLUSI UTAMA: Mengirimkan langsung mentahan $jsonBody menggunakan withBody()
+            // Tembak API iPaymu dengan Header Lengkap
             $response = Http::withHeaders([
-                'va'        => $va,
-                'signature' => $signature
+                'Accept'       => 'application/json',
+                'Content-Type' => 'application/json',
+                'va'           => $va,
+                'signature'    => $signature,
+                'timestamp'    => $timestamp // Menyertakan waktu request
             ])->withBody($jsonBody, 'application/json')->post($url);
 
             $resData = $response->json();
@@ -163,7 +171,10 @@ class TelegramController extends Controller
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
                 Log::error('iPaymu Error: ', $resData ?? []);
-                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . ($resData['Message'] ?? 'Terjadi kesalahan internal iPaymu.'));
+                
+                // Menampilkan alasan detail kegagalan dari response iPaymu
+                $errorMsg = $resData['Message'] ?? 'Terjadi kesalahan internal iPaymu.';
+                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . $errorMsg);
             }
         } catch (\Exception $e) {
             Log::error('iPaymu Exception: ' . $e->getMessage());
