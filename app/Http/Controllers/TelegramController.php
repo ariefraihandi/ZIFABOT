@@ -24,7 +24,6 @@ class TelegramController extends Controller
             $callbackQueryId = $callbackQuery['id'];
             $name = $callbackQuery['from']['first_name'];
 
-            // Hentikan loading spinner di aplikasi Telegram user
             $this->answerCallbackQuery($callbackQueryId);
 
             // Paket 1 Bulan
@@ -41,7 +40,7 @@ class TelegramController extends Controller
             
             // Tombol Sudah Berlangganan di Sosmed
             elseif ($callbackData === 'sudah_langganan_sosmed') {
-                $pesan = "📲 <b>KONFIRMASI LANGGANAN SOSMED</b>\n\nSilahkan balas dengan nama sosial media anda dengan format:\n<code>fb nama akun fb</code>\n\n<i>Atau jika dari platform lain:</i>\n<code>ig nama akun ig</code>\n<code>tiktok nama akun tiktok</code>";
+                $pesan = "📲 <b>KONFIRMASI LANGGANAN SOSMED</b>\n\nSilahkan balas dengan nama sosial media anda dengan format:\n<code>fb, nama akun fb</code>\n\n<i>Atau jika dari platform lain:</i>\n<code>ig, nama akun ig</code>\n<code>tiktok, nama akun tiktok</code>";
                 $this->kirimPesan($chatId, $pesan);
             }
 
@@ -58,7 +57,6 @@ class TelegramController extends Controller
             $from = $update['message']['from'];
             $telegramId = $from['id'];
 
-            // Abaikan chat di dalam grup/channel
             if ($chatType === 'group' || $chatType === 'supergroup') {
                 if (str_starts_with($text, '/id')) {
                     $this->kirimPesan($chatId, "ID ini adalah: <code>{$chatId}</code>");
@@ -70,13 +68,11 @@ class TelegramController extends Controller
                 $username = $from['username'] ?? null;
                 $name = $from['first_name'] . (isset($from['last_name']) ? ' ' . $from['last_name'] : '');
 
-                // Daftarkan user ke DB jika belum ada
                 $user = TelegramUser::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     ['username' => $username, 'name' => $name, 'role' => ($telegramId == env('TELEGRAM_SUPER_ADMIN_ID')) ? 'admin' : 'member', 'status' => 'none']
                 );
 
-                // STRUKTUR TOMBOL TERBARU (TANPA AI)
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
@@ -91,26 +87,23 @@ class TelegramController extends Controller
 
                 $textLower = strtolower($text);
 
-                // JIKA USER MENGETIK /START, HALO, ATAU P
                 if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
                     $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
                     
                     $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 } 
                 
-                // DETEKSI OTOMATIS JIKA USER MEMBALAS DENGAN FORMAT SOSIAL MEDIA
-                elseif (str_starts_with($textLower, 'fb ') || str_starts_with($textLower, 'ig ') || str_starts_with($textLower, 'tiktok ')) {
-                    $pesanKonfirmasi = "✅ <b>Data Konfirmasi Diterima!</b>\n\nTerima kasih {$name}, laporan akun sosial media kamu (<code>{$text}</code>) telah kami catat.\n\nAdmin akan segera melakukan verifikasi manual untuk mengecek langganan kamu dan membuka akses channel premium. Mohon ditunggu ya! 🙏";
+                // DETEKSI FORMAT SOSMED (Mendukung format dengan koma 'fb,' atau spasi 'fb ')
+                elseif (str_starts_with($textLower, 'fb') || str_starts_with($textLower, 'ig') || str_starts_with($textLower, 'tiktok')) {
+                    $pesanKonfirmasi = "mohon menunggu konfirmasi dari zifa untuk di tambahkan ke group ya.";
                     
                     $this->kirimPesan($chatId, $pesanKonfirmasi);
                     
-                    // Mencatat ke sistem log cPanel agar kamu bisa memantau kiriman sosmed user
                     Log::info("SOSMED SUBMISSION: User {$name} ({$chatId}) mengirimkan data: {$text}");
                 } 
                 
-                // JIKA CHAT BIASA TANPA FORMAT -> DIARAHKAN KEMBALI KE MENU UTAMA
                 else {
-                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan, ketik konfirmasi dengan format: <code>fb nama akun fb</code>";
+                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan, ketik konfirmasi dengan format: <code>fb, nama akun fb</code>";
                     
                     $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
                 }
