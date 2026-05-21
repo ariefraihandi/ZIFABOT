@@ -27,17 +27,14 @@ class TelegramController extends Controller
 
             $this->answerCallbackQuery($callbackQueryId);
 
-            // Jika pilih Paket 1 Bulan
             if ($callbackData === 'paket_1_bulan') {
-                $this->prosesPembayaran($chatId, $name, 45000, 'Paket 1 Bulan', $telegramId);
+                $this->prosesPembayaran($chatId, $name, 45000, 'Paket 1 Bulan', $telegramId, 1);
             } 
             
-            // Jika pilih Paket 3 Bulan
             elseif ($callbackData === 'paket_3_bulan') {
-                $this->prosesPembayaran($chatId, $name, 120000, 'Paket 3 Bulan', $telegramId);
+                $this->prosesPembayaran($chatId, $name, 120000, 'Paket 3 Bulan', $telegramId, 3);
             } 
             
-            // Tombol Sudah Berlangganan di Sosmed
             elseif ($callbackData === 'sudah_langganan_sosmed') {
                 $pesan = "📲 <b>KONFIRMASI LANGGANAN SOSMED</b>\n\nSilahkan balas dengan nama sosial media anda dengan format:\n<code>fb, nama akun fb</code>\n\n<i>Atau jika dari platform lain:</i>\n<code>ig, nama akun ig</code>\n<code>tiktok, nama akun tiktok</code>";
                 $this->kirimPesan($chatId, $pesan);
@@ -86,9 +83,39 @@ class TelegramController extends Controller
 
                 $textLower = strtolower($text);
 
+                // FITUR BACKDOOR / SIMULASI UJI COBA INTERNAL
+                if ($text === '/testbayar') {
+                    $user->update([
+                        'status' => 'paid',
+                        'expired_at' => now()->addMonth()
+                    ]);
+
+                    $this->kirimPesan($chatId, "🎉 <b>Selamat Pembayaran Anda Berhasil!</b>\n\nmohon tunggu saya akan membuat tautan undangan spesial untuk anda.");
+
+                    $botToken = env('TELEGRAM_BOT_TOKEN');
+                    $groupId = env('TELEGRAM_GROUP_ID');
+                    
+                    $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
+                        'chat_id' => $groupId,
+                        'member_limit' => 1
+                    ]);
+
+                    $inviteData = $inviteResponse->json();
+                    
+                    if (isset($inviteData['ok']) && $inviteData['ok'] === true) {
+                        $inviteLink = $inviteData['result']['invite_link'];
+                        $pesanLink = "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>";
+                        $this->kirimPesan($chatId, $pesanLink);
+                    } else {
+                        Log::error('Test Invite Link Failed: ', $inviteData ?? []);
+                        $this->kirimPesan($chatId, "❌ Gagal membuat link undangan otomatis. Pastikan bot sudah diset menjadi Admin di Channel target.");
+                    }
+                    
+                    return response()->json(['status' => 'success'], 200);
+                }
+
                 if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
                     $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
-                    
                     $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 } 
                 
@@ -111,14 +138,14 @@ class TelegramController extends Controller
     // ==========================================
     // 3. LOGIKA INTEGRASI API REDIRECT IPAYMU
     // ==========================================
-    private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId)
+    private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
         $va = env('IPAYMU_VA');
         $apiKey = env('IPAYMU_API_KEY');
         $url = env('IPAYMU_URL');
 
-        // ID Unik Transaksi
-        $referenceId = "ZIFABOT-" . $telegramId . "-" . time();
+        // Pembuatan ID Transaksi unik
+        $referenceId = "ZIFABOT-" . $telegramId . "-" . $months . "bln-" . time();
 
         $body = [
             'product'     => [$packageName],
@@ -128,22 +155,16 @@ class TelegramController extends Controller
             'cancelUrl'   => 'https://zifabot.bilikmedia.com/payment/cancel',
             'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback',
             'referenceId' => $referenceId,
-            'description' => ["Langganan Premium Ziva Zalina"] // SOLUSI: Dibungkus array [] sesuai request API
+            'description' => ["Langganan Premium Ziva Zalina"]
         ];
 
-        // 1. Generate JSON Body
         $jsonBody     = json_encode($body, JSON_UNESCAPED_SLASHES);
         $requestBody  = strtolower(hash('sha256', $jsonBody));
-        
-        // 2. Rumus Signature
         $stringToSign = 'POST:' . $va . ':' . $requestBody . ':' . $apiKey;
         $signature    = hash_hmac('sha256', $stringToSign, $apiKey);
-        
-        // 3. Timestamp
         $timestamp    = date('YmdHis');
 
         try {
-            // Tembak API iPaymu
             $response = Http::withHeaders([
                 'Accept'       => 'application/json',
                 'Content-Type' => 'application/json',
@@ -154,11 +175,11 @@ class TelegramController extends Controller
 
             $resData = $response->json();
 
-            // Jika iPaymu Sukses Merespon (Status 200)
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'];
 
-                $pesanTagihan = "💳 <b>NOTA TAGIHAN IPAYMU (SANDBOX)</b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
+                // SUDAH DITAMBAHKAN: Baris informasi ID Transaksi dengan fitur auto-copy
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN IPAYMU (SANDBOX)</b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n🆔 <b>ID Transaksi:</b> <code>{$referenceId}</code>\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
                 
                 $tombolBayar = [
                     'inline_keyboard' => [
@@ -171,36 +192,27 @@ class TelegramController extends Controller
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
                 Log::error('iPaymu Error: ', $resData ?? []);
-                $errorMsg = $resData['Message'] ?? 'Terjadi kesalahan internal iPaymu.';
-                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . $errorMsg);
+                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . ($resData['Message'] ?? 'Internal iPaymu error.'));
             }
         } catch (\Exception $e) {
             Log::error('iPaymu Exception: ' . $e->getMessage());
-            $this->kirimPesan($chatId, "❌ Terjadi gangguan jaringan saat menghubungi server iPaymu.");
+            $this->kirimPesan($chatId, "❌ Terjadi gangguan jaringan iPaymu.");
         }
     }
 
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
     {
         $botToken = env('TELEGRAM_BOT_TOKEN');
-        $payload = [
-            'chat_id' => $chatId,
-            'text' => $pesan,
-            'parse_mode' => 'HTML'
-        ];
-
+        $payload = ['chat_id' => $chatId, 'text' => $pesan, 'parse_mode' => 'HTML'];
         if ($replyMarkup) {
             $payload['reply_markup'] = json_encode($replyMarkup);
         }
-
         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", $payload);
     }
 
     private function answerCallbackQuery($callbackQueryId)
     {
         $botToken = env('TELEGRAM_BOT_TOKEN');
-        Http::post("https://api.telegram.org/bot{$botToken}/answerCallbackQuery", [
-            'callback_query_id' => $callbackQueryId
-        ]);
+        Http::post("https://api.telegram.org/bot{$botToken}/answerCallbackQuery", ['callback_query_id' => $callbackQueryId]);
     }
 }
