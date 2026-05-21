@@ -44,7 +44,7 @@ class TelegramController extends Controller
         }
 
         // ==========================================
-        // 2. LOGIKA JIKA USER CHAT BIASA (MESSAGE)
+        // 2. LOGIKA CHAT BIASA
         // ==========================================
         if (isset($update['message'])) {
             $chatId = $update['message']['chat']['id'];
@@ -83,34 +83,19 @@ class TelegramController extends Controller
 
                 $textLower = strtolower($text);
 
-                // FITUR BACKDOOR / SIMULASI UJI COBA INTERNAL
+                // FITUR BACKDOOR (Bisa kamu abaikan/hapus nanti)
                 if ($text === '/testbayar') {
-                    $user->update([
-                        'status' => 'paid',
-                        'expired_at' => now()->addMonth()
-                    ]);
-
+                    $user->update(['status' => 'paid', 'expired_at' => now()->addMonth()]);
                     $this->kirimPesan($chatId, "🎉 <b>Selamat Pembayaran Anda Berhasil!</b>\n\nmohon tunggu saya akan membuat tautan undangan spesial untuk anda.");
-
+                    
                     $botToken = env('TELEGRAM_BOT_TOKEN');
                     $groupId = env('TELEGRAM_GROUP_ID');
-                    
-                    $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
-                        'chat_id' => $groupId,
-                        'member_limit' => 1
-                    ]);
-
+                    $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", ['chat_id' => $groupId, 'member_limit' => 1]);
                     $inviteData = $inviteResponse->json();
                     
                     if (isset($inviteData['ok']) && $inviteData['ok'] === true) {
-                        $inviteLink = $inviteData['result']['invite_link'];
-                        $pesanLink = "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>";
-                        $this->kirimPesan($chatId, $pesanLink);
-                    } else {
-                        Log::error('Test Invite Link Failed: ', $inviteData ?? []);
-                        $this->kirimPesan($chatId, "❌ Gagal membuat link undangan otomatis. Pastikan bot sudah diset menjadi Admin di Channel target.");
+                        $this->kirimPesan($chatId, "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini:\n👉 " . $inviteData['result']['invite_link'] . "\n\n⚠️ <i>Note: Jangan dibagikan ya!</i>");
                     }
-                    
                     return response()->json(['status' => 'success'], 200);
                 }
 
@@ -122,7 +107,6 @@ class TelegramController extends Controller
                 elseif (str_starts_with($textLower, 'fb') || str_starts_with($textLower, 'ig') || str_starts_with($textLower, 'tiktok')) {
                     $pesanKonfirmasi = "mohon menunggu konfirmasi dari zifa untuk di tambahkan ke group ya.";
                     $this->kirimPesan($chatId, $pesanKonfirmasi);
-                    Log::info("SOSMED SUBMISSION: User {$name} ({$chatId}) mengirimkan data: {$text}");
                 } 
                 
                 else {
@@ -136,7 +120,7 @@ class TelegramController extends Controller
     }
 
     // ==========================================
-    // 3. LOGIKA INTEGRASI API REDIRECT IPAYMU
+    // 3. LOGIKA INTEGRASI API IPAYMU
     // ==========================================
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
@@ -144,7 +128,6 @@ class TelegramController extends Controller
         $apiKey = env('IPAYMU_API_KEY');
         $url = env('IPAYMU_URL');
 
-        // Pembuatan ID Transaksi unik
         $referenceId = "ZIFABOT-" . $telegramId . "-" . $months . "bln-" . time();
 
         $body = [
@@ -176,23 +159,29 @@ class TelegramController extends Controller
             $resData = $response->json();
 
             if (isset($resData['Status']) && $resData['Status'] == 200) {
-                $paymentUrl = $resData['Data']['Url'];
+                $paymentUrl = $resData['Data']['Url'] ?? '';
+                
+                // 🛠️ TANGKAP SESSION ID & TRANSACTION ID ASLI DARI RESPONS IPAYMU
+                $ipaymuSessionId = $resData['Data']['SessionID'] ?? 'Tidak Ada';
+                $ipaymuTrxId     = $resData['Data']['TransactionID'] ?? 'Tidak Ada';
 
-                // SUDAH DITAMBAHKAN: Baris informasi ID Transaksi dengan fitur auto-copy
-                $pesanTagihan = "💳 <b>NOTA TAGIHAN IPAYMU (SANDBOX)</b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n🆔 <b>ID Transaksi:</b> <code>{$referenceId}</code>\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
+                // Tampilkan semua ID di dalam pesan untuk memudahkan simulasi manual
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN IPAYMU (SANDBOX)</b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n" .
+                                "🔑 <b>iPaymu Session ID:</b> <code>{$ipaymuSessionId}</code> (Gunakan ini di Simulator!)\n" .
+                                "🆔 <b>iPaymu Trx ID:</b> <code>{$ipaymuTrxId}</code>\n" .
+                                "📝 <b>Merchant Ref ID:</b> <code>{$referenceId}</code>\n" .
+                                "📦 <b>Produk:</b> {$packageName}\n" .
+                                "💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n" .
+                                "👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
                 
                 $tombolBayar = [
-                    'inline_keyboard' => [
-                        [
-                            ['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]
-                        ]
-                    ]
+                    'inline_keyboard' => [[['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]]]
                 ];
 
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
                 Log::error('iPaymu Error: ', $resData ?? []);
-                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . ($resData['Message'] ?? 'Internal iPaymu error.'));
+                $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . ($resData['Message'] ?? 'Internal error.'));
             }
         } catch (\Exception $e) {
             Log::error('iPaymu Exception: ' . $e->getMessage());
