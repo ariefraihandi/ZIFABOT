@@ -117,7 +117,7 @@ class TelegramController extends Controller
         $apiKey = env('IPAYMU_API_KEY');
         $url = env('IPAYMU_URL');
 
-        // ID Unik Transaksi agar nanti saat iPaymu Callback, kita tahu siapa yang bayar
+        // ID Unik Transaksi
         $referenceId = "ZIFABOT-" . $telegramId . "-" . time();
 
         $body = [
@@ -126,24 +126,23 @@ class TelegramController extends Controller
             'price'       => [(string)$amount],
             'returnUrl'   => 'https://zifabot.bilikmedia.com/payment/success',
             'cancelUrl'   => 'https://zifabot.bilikmedia.com/payment/cancel',
-            'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback', // Jalur Laporan iPaymu
+            'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback',
             'referenceId' => $referenceId,
             'description' => "Langganan Premium Ziva Zalina"
         ];
 
-        // Hitung Signature Keamanan Standar iPaymu v2 API
-        $jsonBody    = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $bodyHash    = strtolower(hash('sha256', $jsonBody));
+        // Mengunci format JSON agar tidak diacak-acak kembali oleh Laravel
+        $jsonBody     = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $bodyHash     = strtolower(hash('sha256', $jsonBody));
         $stringToSign = "POST\n" . $va . "\n" . $bodyHash . "\n" . $apiKey;
-        $signature   = hash_hmac('sha256', $stringToSign, $apiKey);
+        $signature    = hash_hmac('sha256', $stringToSign, $apiKey);
 
         try {
-            // Tembak API iPaymu
+            // SOLUSI UTAMA: Mengirimkan langsung mentahan $jsonBody menggunakan withBody()
             $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-                'va'           => $va,
-                'signature'    => $signature
-            ])->post($url, $body);
+                'va'        => $va,
+                'signature' => $signature
+            ])->withBody($jsonBody, 'application/json')->post($url);
 
             $resData = $response->json();
 
@@ -163,7 +162,7 @@ class TelegramController extends Controller
 
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
-                Log::error('iPaymu Error: ', $resData);
+                Log::error('iPaymu Error: ', $resData ?? []);
                 $this->kirimPesan($chatId, "❌ Gagal membuat tagihan: " . ($resData['Message'] ?? 'Terjadi kesalahan internal iPaymu.'));
             }
         } catch (\Exception $e) {
