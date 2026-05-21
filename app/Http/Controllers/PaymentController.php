@@ -13,7 +13,6 @@ class PaymentController extends Controller
     {
         Log::info('iPaymu Callback Incoming: ', $request->all());
 
-        // Mengambil status dan reference_id (bisa dari iPaymu manual simulator)
         $status = $request->input('status'); 
         $referenceId = $request->input('reference_id');
 
@@ -25,49 +24,85 @@ class PaymentController extends Controller
             
             if (count($parts) >= 3) {
                 $telegramId = $parts[1];
-                $months = (int)$parts[2]; 
+                $months = (int)$parts[2]; // Otomatis mengonversi "1bln" menjadi angka 1
 
                 $user = TelegramUser::where('telegram_id', $telegramId)->first();
                 
                 if ($user) {
-                    // 1. Update status di database menjadi 'paid' (Sudah bayar tapi belum join channel)
+                    // 1. MASUKKAN / UPDATE DATA KEDALAM DATABASE (Status sementara 'paid')
                     $user->update([
                         'status' => 'paid',
                         'expired_at' => now()->addMonths($months)
                     ]);
 
                     $botToken = env('TELEGRAM_BOT_TOKEN');
+                    $groupId = env('TELEGRAM_GROUP_ID');
 
-                    // 2. KIRIM PESAN PERTAMA (Sesuai Request Anda)
+                    // 2. YANG TERPENTING: LANGSUNG KIRIM PESAN BALASAN PEMBAYARAN DITERIMA
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                         'chat_id' => $telegramId,
-                        'text' => "🎉 <b>Pembayaran sudah zifa terima,</b>\n\nmohon tunggu saya akan membuat tautan undangan spesial untuk anda.",
+                        'text' => "🎉 <b>Pembayaran sudah kami terima!</b>\n\nMohon tunggu sejenak, saya sedang memeriksa status keanggotaan Anda di channel premium Ziva.",
                         'parse_mode' => 'HTML'
                     ]);
 
-                    // 3. Request ke Telegram untuk membuat link undangan spesial (Limit 1 Orang)
-                    $groupId = env('TELEGRAM_GROUP_ID'); // ID Channel/Group Premium Anda
-                    $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
+                    // 3. LAKUKAN PENGECEKAN: APAKAH ID PELANGGAN SUDAH ADA DI CHANNEL
+                    $checkResponse = Http::post("https://api.telegram.org/bot{$botToken}/getChatMember", [
                         'chat_id' => $groupId,
-                        'member_limit' => 1
+                        'user_id' => $telegramId
                     ]);
 
-                    $inviteData = $inviteResponse->json();
-                    
-                    if (isset($inviteData['ok']) && $inviteData['ok'] === true) {
-                        $inviteLink = $inviteData['result']['invite_link'];
+                    $checkData = $checkResponse->json();
+                    $alreadyJoined = false;
 
-                        // 4. Kirim Pesan Kedua: Menyodorkan Tautan Rahasia Sekali Pakai
-                        $pesanLink = "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>";
+                    if (isset($checkData['ok']) && $checkData['ok'] === true) {
+                        $memberStatus = $checkData['result']['status'];
+                        // Jika statusnya adalah member, administrator, atau owner/creator
+                        if (in_array($memberStatus, ['member', 'administrator', 'creator'])) {
+                            $alreadyJoined = true;
+                        }
+                    }
+
+                    // 4. JIKA SUDAH BERGABUNG (KASUS PERPANJANG LANGGANAN)
+                    if ($alreadyJoined) {
+                        // Langsung set status menjadi active di DB
+                        $user->update(['status' => 'active']);
 
                         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                             'chat_id' => $telegramId,
-                            'text' => $pesanLink,
+                            'text' => "🥳 <b>Selamat! Masa aktif langganan Anda telah diperpanjang.</b>\n\nSistem mendeteksi Anda sudah berada di dalam channel premium. Selamat menikmati kembali konten eksklusif kami! ✨",
                             'parse_mode' => 'HTML'
                         ]);
-                    } else {
-                        Log::error('Telegram Create Link Failed: ', $inviteData ?? []);
+                    } 
+                    
+                    // 5. JIKA BELUM BERGABUNG -> GENERATE TAUTAN UNDANGAN SPESIAL
+                    else {
+                        $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
+                            'chat_id' => $groupId,
+                            'member_limit' => 1 // Batasi hanya bisa dipakai 1 orang
+                        ]);
+
+                        $inviteData = $inviteResponse->json();
+                        
+                        if (isset($inviteData['ok']) && $inviteData['ok'] === true) {
+                            $inviteLink = $inviteData['result']['invite_link'];
+
+                            $pesanLink = "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>";
+
+                            Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                                'chat_id' => $telegramId,
+                                'text' => $pesanLink,
+                                'parse_mode' => 'HTML'
+                            ]);
+                        } else {
+                            Log::error('Telegram Create Link Failed: ', $inviteData ?? []);
+                            Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                                'chat_id' => $telegramId,
+                                'text' => "❌ Gagal membuat tautan undangan otomatis secara internal. Mohon hubungi Zifa untuk bantuan manual.",
+                                'parse_mode' => 'HTML'
+                            ]);
+                        }
                     }
+
                 }
             }
         }
