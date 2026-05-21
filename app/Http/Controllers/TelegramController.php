@@ -29,6 +29,7 @@ class TelegramController extends Controller
 
             $this->answerCallbackQuery($callbackQueryId);
 
+            // --- PILIHAN PAKET NOTA UTAMA ---
             if ($callbackData === 'paket_1_bulan') {
                 $this->prosesPembayaran($chatId, $name, 45000, 'Paket 1 Bulan', $telegramId, 1);
             } 
@@ -37,6 +38,7 @@ class TelegramController extends Controller
                 $this->prosesPembayaran($chatId, $name, 120000, 'Paket 3 Bulan', $telegramId, 3);
             } 
             
+            // --- JIKA KLIK SUDAH LANGGANAN SOSMED -> MUNCULKAN PILIHAN PLATFORM ---
             elseif ($callbackData === 'sudah_langganan_sosmed') {
                 $tombolSosmed = [
                     'inline_keyboard' => [
@@ -53,6 +55,7 @@ class TelegramController extends Controller
                 $this->kirimPesan($chatId, $pesan, $tombolSosmed);
             }
 
+            // --- JIKA USER MEMILIH SALAH SATU PLATFORM ---
             elseif ($callbackData === 'pilih_tt') {
                 TelegramUser::where('telegram_id', $telegramId)->update(['status' => 'waiting_tt']);
                 $this->kirimPesan($chatId, "✍️ <b>INPUT AKUN TIKTOK</b>\n\nSilakan balas chat ini dengan mengetik <b>Nama Akun / Username TikTok</b> Anda:");
@@ -79,6 +82,7 @@ class TelegramController extends Controller
             $chatId = $message['chat']['id'];
             $chatType = $message['chat']['type'] ?? 'private';
             
+            // Tangkap teks biasa ATAU teks caption gambar
             $text = $message['text'] ?? $message['caption'] ?? ''; 
             $from = $message['from'];
             $telegramId = $from['id'];
@@ -94,6 +98,7 @@ class TelegramController extends Controller
                 $username = $from['username'] ?? null;
                 $name = $from['first_name'] . (isset($from['last_name']) ? ' ' . $from['last_name'] : '');
 
+                // Ambil atau daftarkan user, dapatkan statusnya saat ini
                 $user = TelegramUser::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     ['username' => $username, 'name' => $name, 'role' => ($telegramId == $adminId) ? 'admin' : 'member', 'status' => 'none']
@@ -131,7 +136,7 @@ class TelegramController extends Controller
                 }
 
                 // ====================================================
-                // 🛠️ LOGIKA SINKRONISASI DAN INTERAKSI KE TELE ADMIN
+                // 🛠️ ALUR KETAT: DB -> NOTIF ADMIN -> BALAS USER
                 // ====================================================
                 if (in_array($user->status, ['waiting_tt', 'waiting_ig', 'waiting_fb']) && $text !== '') {
                     
@@ -142,58 +147,64 @@ class TelegramController extends Controller
                     ];
                     
                     $currentPlatform = $platformMapping[$user->status];
+                    $platformName = strtoupper($currentPlatform);
 
                     try {
-                        // 1. Amankan data pengikut ke DB social_accounts
+                        // 1. INPUT DULU KE DATABASE
                         \App\Models\SocialAccount::updateOrCreate(
                             ['telegram_id' => $telegramId, 'platform' => $currentPlatform],
                             ['username_sosmed' => $text, 'persona_slug' => 'zifazalina', 'joined_at' => now()]
                         );
 
-                        // 2. Kirim pesan kepastian sukses ke user pelanggan
-                        $platformName = strtoupper($currentPlatform);
-                        $pesanSukses = "✅ <b>KONFIRMASI DIKIRIM!</b>\n\nData Akun Berhasil Dicatat:\n🌐 <b>Platform:</b> {$platformName}\n👤 <b>Nama Akun:</b> <code>{$text}</code>\n\n<i>Mohon tunggu sebentar ya, Kak. Tim Zifa akan segera memeriksa akun sosial media Anda untuk membuka akses grup! 🙏</i>";
-                        $this->kirimPesan($chatId, $pesanSukses);
-
-                        // 3. Tarik data gambar pendukung jikalau ada
+                        // Tarik data gambar pendukung jikalau ada
                         $savedPhotoId = (isset($message['photo'])) ? $fileId : $user->username;
 
-                        // 4. FORMAT TEMPLATE CHAT REKAYASA SESUAI INPUT KAKAK 💬
+                        // Format template pesan untuk Telegram Admin
                         $pesanAdmin = "📢 <b>[NOTIFIKASI ASISTEN BOT]</b>\n\n" .
                                       "Hi min, ada member baru ngaku-ngaku udah daftar di <b>{$platformName}</b> dengan nama <code>{$text}</code>.\n\n" .
                                       "👤 <b>Nama Tele User:</b> {$name}\n" .
                                       "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n\n" .
                                       "Tolong di cek dong. aku tunggu ya miiin! 🦾";
 
-                        // 5. TEMBAK SEKARANG JUGA KE ADMIN TERCINTA
                         $botToken = env('TELEGRAM_BOT_TOKEN');
 
-                        // Cek apakah string berupa ID foto Telegram (diawali AgAC)
+                        // 2. KIRIM NOTIFIKASI KE ADMIN DULUT
                         if ($savedPhotoId && str_starts_with($savedPhotoId, 'AgAC')) { 
-                            Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
+                            $responseAdmin = Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
                                 'chat_id' => $adminId,
                                 'photo'   => $savedPhotoId,
                                 'caption' => $pesanAdmin,
                                 'parse_mode' => 'HTML'
                             ]);
                         } else {
-                            // Kirim teks biasa ke admin jika user tidak menyertakan foto
-                            Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                            $responseAdmin = Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                                 'chat_id' => $adminId,
                                 'text'    => $pesanAdmin,
                                 'parse_mode' => 'HTML'
                             ]);
                         }
 
-                        // Kembalikan data profile username \& status ke normal
+                        // Proteksi: Validasi apakah pesan resmi masuk atau ditolak API Telegram
+                        if (!$responseAdmin->successful()) {
+                            $resBody = $responseAdmin->json();
+                            throw new \Exception("Gagal kirim notifikasi ke Admin. Deskripsi: " . ($resBody['description'] ?? 'Unknown API Error'));
+                        }
+
+                        // 3. JIKA SINKRONISASI ADMIN BERHASIL, BARU KIRIM BALAS PESAN KE USER
+                        $pesanSukses = "✅ <b>KONFIRMASI DIKIRIM!</b>\n\nData Akun Berhasil Dicatat:\n🌐 <b>Platform:</b> {$platformName}\n👤 <b>Nama Akun:</b> <code>{$text}</code>\n\n<i>Mohon tunggu sebentar ya, Kak. Tim Zifa akan segera memeriksa akun sosial media Anda untuk membuka akses grup! 🙏</i>";
+                        $this->kirimPesan($chatId, $pesanSukses);
+
+                        // Kembalikan data profile username & status ke normal
                         $user->update([
                             'status' => 'none',
                             'username' => $from['username'] ?? null
                         ]);
 
                     } catch (\Exception $e) {
-                        Log::error('Admin Forwarding Error: ' . $e->getMessage());
-                        $this->kirimPesan($chatId, "❌ <b>SISTEM DB ERROR:</b> <code>" . $e->getMessage() . "</code>");
+                        Log::error('Alur Mengalami Gangguan: ' . $e->getMessage());
+                        
+                        // Memancing respon error ke ruang chat user agar mudah dilacak kendalanya
+                        $this->kirimPesan($chatId, "❌ <b>SISTEM PROSES ERROR:</b>\n<code>" . $e->getMessage() . "</code>\n\n<i>(Catatan Penting: Pastikan ID Admin Utama sudah benar-benar menekan tombol /start di bot ini terlebih dahulu)</i>");
                     }
                     
                     return response()->json(['status' => 'success'], 200);
@@ -221,7 +232,7 @@ class TelegramController extends Controller
 
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
-        // ... (Fungsi iPaymu Kakak di bawah tetap biarkan aman utuh) ...
+        // ... (Logika integrasi iPaymu Kakak di bawah tetap utuh dan aman) ...
     }
 
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
