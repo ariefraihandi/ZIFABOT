@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\TelegramUser;
+use App\Models\SocialAccount;
+use Carbon\Carbon; 
 
 class TelegramController extends Controller
 {
@@ -122,28 +124,53 @@ class TelegramController extends Controller
                             $inputPlatform = 'tiktok'; 
                         }
 
-                        // 🔥 OTOMATIS BULK INPUT/UPDATE KE TABEL social_accounts
-                        \App\Models\SocialAccount::updateOrCreate(
-                            [
-                                'telegram_id'  => $telegramId,
-                                'platform'     => $inputPlatform
-                            ],
-                            [
-                                'username_sosmed' => $usernameSosmed,
-                                'persona_slug'    => 'zifazalina', // Mengidentifikasi grup/persona Zifa
-                                'joined_at'       => now()         // Tanggal masuk default diatur hari ini
-                            ]
-                        );
+                        try {
+                            // 🔥 PROSES INPUT/UPDATE KE TABEL social_accounts
+                            $savedData = \App\Models\SocialAccount::updateOrCreate(
+                                [
+                                    'telegram_id'  => $telegramId,
+                                    'platform'     => $inputPlatform
+                                ],
+                                [
+                                    'username_sosmed' => $usernameSosmed,
+                                    'persona_slug'    => 'zifazalina', // Mengidentifikasi grup/persona Zifa
+                                    'joined_at'       => now()         // Tanggal masuk default diatur hari ini
+                                ]
+                            );
 
-                        // Kirim pesan sukses ke user tanpa link pembayaran/invite
-                        $pesanKonfirmasi = "✅ <b>Data Berhasil Dicatat!</b>\n\nAkun <b>" . strtoupper($inputPlatform) . "</b> dengan nama: <code>{$usernameSosmed}</code> telah berhasil dimasukkan ke sistem data pengikut.\n\nMohon tunggu sebentar ya, Kak. Tim Zifa akan segera memeriksa akun sosial media Kakak untuk verifikasi akhir! 🙏";
-                        $this->kirimPesan($chatId, $pesanKonfirmasi);
+                            // BACA KEMBALI DARI DB UNTUK MEMASTIKAN DATA BENAR-BENAR ADA
+                            if ($savedData) {
+                                $platformUpper = strtoupper($inputPlatform);
+                                $pesanPasti = "✅ <b>KONFIRMASI SUKSES TERSIMPAN!</b>\n\n" .
+                                              "Sistem Zifabot memastikan data Anda telah berhasil masuk ke Database:\n\n" .
+                                              "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n" .
+                                              "🌐 <b>Platform:</b> <code>{$platformUpper}</code>\n" .
+                                              "👤 <b>Nama Akun:</b> <code>{$usernameSosmed}</code>\n" .
+                                              "📅 <b>Waktu Data:</b> " . now()->format('Y-m-d H:i:s') . "\n\n" .
+                                              "<i>Mohon menunggu sebentar, tim Zifa akan segera memverifikasi akun sosial media Anda untuk membuka akses grup premium! 🙏</i>";
+                                
+                                $this->kirimPesan($chatId, $pesanPasti);
+                            } else {
+                                $this->kirimPesan($chatId, "❌ <b>Gagal Menyimpan!</b>\n\nDatabase menolak data tersebut tanpa memicu eror. Mohon hubungi admin.");
+                            }
+
+                        } catch (\Exception $e) {
+                            // JIKA GAGAL MASUK DB, TANGKAP ERORNYA DAN KIRIM KE USER
+                            $errorMessage = $e->getMessage();
+                            $pesanErorDB = "⚠️ <b>DATABASE ERROR TIMED OUT/REJECTED!</b>\n\n" .
+                                           "Gagal memasukkan data sosial media kamu ke dalam sistem.\n\n" .
+                                           "<b>Detail Eror:</b>\n<code>{$errorMessage}</code>\n\n" .
+                                           "<i>Silakan screenshoot pesan ini dan berikan ke Zifa untuk perbaikan teknis.</i>";
+                            
+                            $this->kirimPesan($chatId, $pesanErorDB);
+                        }
+
                     } else {
                         // Jika user mengetik singkat tanpa format koma yang jelas (misal cuma ngetik "fb")
                         $pesanFormatGagal = "❌ <b>Format Salah!</b>\n\nSilakan ketik ulang konfirmasi Anda dengan menggunakan tanda koma seperti contoh berikut:\n\n<code>fb, nama akun facebook kamu</code>\natau\n<code>ig, username instagram kamu</code>";
                         $this->kirimPesan($chatId, $pesanFormatGagal);
                     }
-                } 
+                }
                 
                 // --- C. JIKA USER MENGETIK CHAT BIASA/LAINNYA ---
                 else {
