@@ -112,8 +112,8 @@ class TelegramController extends Controller
                     $bestPhoto = end($photoArray);
                     $fileId = $bestPhoto['file_id'];
 
-                    // Titipkan sementara di kolom username database user
-                    $user->update(['username' => $fileId]); 
+                    // 🌟 PERBAIKAN: Titipkan di kolom 'status' dengan format khusus, JANGAN di kolom username!
+                    $user->update(['status' => 'photo_' . $fileId]); 
                 }
 
                 // --- INTERAKSI UTAMA /START ---
