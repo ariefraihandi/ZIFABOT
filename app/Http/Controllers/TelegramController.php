@@ -38,7 +38,7 @@ class TelegramController extends Controller
             } 
             
             elseif ($callbackData === 'sudah_langganan_sosmed') {
-                $pesan = "📲 <b>KONFIRMASI LANGGANAN SOSMED</b>\n\nSilahkan ketik atau balas dengan nama akun sosial media Anda secara bebas.\n\n💡 <i>Contoh bebas: \"ini akun fb aku: akbar zikri\" atau \"ig saya aray_aza\" atau cukup ketik nama akunnya langsung.</i>\n\n📸 <b>PENTING:</b> Anda juga boleh mengirimkan <b>bukti screenshot gambar</b> bersamaan dengan teks tersebut.";
+                $pesan = "📲 <b>KONFIRMASI LANGGANAN SOSMED</b>\n\nSilahkan ketik nama akun dan platform sosial media Anda secara bebas (Contoh: FB / IG / TikTok).\n\n📸 <b>BUKTI SCREENSHOT:</b> Anda juga bisa mengirimkan foto bukti langganan Anda secara langsung ke sini.";
                 $this->kirimPesan($chatId, $pesan);
             }
 
@@ -46,7 +46,7 @@ class TelegramController extends Controller
         }
 
         // ==========================================
-        // 2. LOGIKA CHAT BIASA (TEKS & GAMBAR)
+        // 2. LOGIKA CHAT BIASA (OTOMATIS MODE AI GROQ)
         // ==========================================
         if (isset($update['message'])) {
             $message = $update['message'];
@@ -77,20 +77,37 @@ class TelegramController extends Controller
 
                 $textLower = strtolower($text);
 
-                // --- 📸 JIKA USER MENGIRIM GAMBAR SCREENSHOT ---
+                // --- 📸 JIKA USER MENGIRIM GAMBAR (LANGSUNG INPUT DB & TERUSKAN KE ADMIN TANPA AI) ---
                 if (isset($message['photo'])) {
                     $photoArray = $message['photo'];
                     $bestPhoto = end($photoArray);
                     $fileId = $bestPhoto['file_id'];
 
-                    // Teruskan gambar langsung ke Admin tanpa beban analisis Groq
+                    // Teruskan gambar langsung ke Telegram Admin
                     $botToken = env('TELEGRAM_BOT_TOKEN');
                     Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
                         'chat_id' => $adminId,
                         'photo'   => $fileId,
-                        'caption' => "📸 <b>Bukti Gambar Masuk</b>\nDari User: {$name} (<code>{$telegramId}</code>)",
+                        'caption' => "📸 <b>Bukti Gambar Masuk</b>\nDari User: {$name} (<code>{$telegramId}</code>)\n💬 Caption: <i>\"" . ($text ?: 'Tidak ada teks') . "\"</i>",
                         'parse_mode' => 'HTML'
                     ]);
+                }
+
+                // --- PERINTAH KHUSUS /START ATAU KATA KUNCI HALO ---
+                if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
+                    $tombolPaket = [
+                        'inline_keyboard' => [
+                            [
+                                ['text' => '📦 Paket 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
+                                ['text' => '📦 Paket 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
+                            ],
+                            [
+                                ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
+                            ]
+                        ]
+                    ];
+                    $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
+                    return $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 }
 
                 // --- BACKDOOR TEST BAYAR ---
@@ -109,8 +126,42 @@ class TelegramController extends Controller
                     return response()->json(['status' => 'success'], 200);
                 }
 
-                // --- AJAKAN INTERAKSI AWAL ---
-                if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
+                // ====================================================
+                // 🚀 MODE UTAMA: LANGSUNG AKTIFKAN SINKRONISASI GROQ AI
+                // ====================================================
+                // Apapun isi teksnya, langsung diolah dan diinterpretasikan oleh Groq AI Cloud
+                $groqAnalysis = $this->analisisTeksDenganGroq($text);
+
+                if ($groqAnalysis && isset($groqAnalysis['is_valid_social_input']) && $groqAnalysis['is_valid_social_input'] === true) {
+                    $inputPlatform = strtolower($groqAnalysis['platform']);
+                    $usernameSosmed = $groqAnalysis['username_sosmed'];
+
+                    try {
+                        // Masukkan data hasil terjemahan AI ke database social_accounts
+                        \App\Models\SocialAccount::updateOrCreate(
+                            ['telegram_id' => $telegramId, 'platform' => $inputPlatform],
+                            ['username_sosmed' => $usernameSosmed, 'persona_slug' => 'zifazalina', 'joined_at' => now()]
+                        );
+
+                        // 1. Kirim kepastian data sukses tersimpan ke user
+                        $pesanUser = "✅ <b>KONFIRMASI BERHASIL DICATAT!</b>\n\nSistem AI Zifabot mendeteksi data Anda:\n🌐 <b>Platform:</b> " . strtoupper($inputPlatform) . "\n👤 <b>Nama Akun:</b> <code>{$usernameSosmed}</code>\n\n<i>Data telah masuk database. Mohon tunggu sebentar, tim Zifa sedang memeriksa akun sosial media Anda untuk verifikasi akses grup! 🙏</i>";
+                        $this->kirimPesan($chatId, $pesanUser);
+
+                        // 2. Kirim detail rangkuman data ke Telegram Admin
+                        $pesanAdmin = "🛡️ <b>[NOTIFIKASI SATPAM BOT] Masuk Input Sosmed Baru!</b>\n\n" .
+                                      "👤 <b>Nama Tele:</b> {$name}\n" .
+                                      "🆔 <b>ID Tele:</b> <code>{$telegramId}</code>\n" .
+                                      "🌐 <b>Platform Sosmed:</b> " . strtoupper($inputPlatform) . "\n" .
+                                      "📝 <b>Nama Akun Sosmed:</b> <code>{$usernameSosmed}</code>\n" .
+                                      "💬 <b>Pesan Asli User:</b> <i>\"" . ($text ?: '[Hanya Mengirim Gambar Bukti]') . "\"</i>\n\n" .
+                                      "⚙️ <i>Status: Menunggu validasi Anda di website admin.</i>";
+                        $this->kirimPesan($adminId, $pesanAdmin);
+
+                    } catch (\Exception $e) {
+                        $this->kirimPesan($chatId, "⚠️ <b>DATABASE ERROR!</b>\n\nDetail Eror:\n<code>" . $e->getMessage() . "</code>");
+                    }
+                } else {
+                    // Jika teks benar-benar percakapan kasual biasa / tidak mengandung identifikasi akun sama sekali
                     $tombolPaket = [
                         'inline_keyboard' => [
                             [
@@ -122,63 +173,11 @@ class TelegramController extends Controller
                             ]
                         ]
                     ];
-                    $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
-                    return $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
-                } 
-
-                // --- 🤖 PROSES UTAMA GROQ ENGINE (100% BEBAS & ULTRA FLEKSIBEL) ---
-                // Semua ketikan bebas di luar command utama atau jika mengirim foto, langsung dianalisis oleh AI
-                if ($text !== '' || isset($message['photo'])) {
-                    
-                    // Panggil mesin Groq AI
-                    $groqAnalysis = $this->analisisTeksDenganGroq($text);
-
-                    if ($groqAnalysis && isset($groqAnalysis['is_valid_social_input']) && $groqAnalysis['is_valid_social_input'] === true) {
-                        $inputPlatform = strtolower($groqAnalysis['platform']);
-                        $usernameSosmed = $groqAnalysis['username_sosmed'];
-
-                        try {
-                            // Masukkan data hasil interpretasi AI ke database social_accounts
-                            \App\Models\SocialAccount::updateOrCreate(
-                                ['telegram_id' => $telegramId, 'platform' => $inputPlatform],
-                                ['username_sosmed' => $usernameSosmed, 'persona_slug' => 'zifazalina', 'joined_at' => now()]
-                            );
-
-                            // 1. Balasan sukses transparan untuk Pengguna
-                            $pesanUser = "✅ <b>KONFIRMASI BERHASIL DICATAT!</b>\n\nSistem AI Zifabot mendeteksi data Anda:\n🌐 <b>Platform:</b> " . strtoupper($inputPlatform) . "\n👤 <b>Nama Akun:</b> <code>{$usernameSosmed}</code>\n\n<i>Data telah masuk database. Mohon tunggu sebentar, tim Zifa sedang memeriksa akun sosial media Anda untuk verifikasi akhir! 🙏</i>";
-                            $this->kirimPesan($chatId, $pesanUser);
-
-                            // 2. Teruskan rangkuman informasi ke Telegram Admin
-                            $pesanAdmin = "🛡️ <b>[NOTIFIKASI SATPAM BOT] Masuk Input Sosmed Baru!</b>\n\n" .
-                                          "👤 <b>Nama Tele:</b> {$name}\n" .
-                                          "🆔 <b>ID Tele:</b> <code>{$telegramId}</code>\n" .
-                                          "🌐 <b>Platform Sosmed:</b> " . strtoupper($inputPlatform) . "\n" .
-                                          "📝 <b>Nama Akun Sosmed:</b> <code>{$usernameSosmed}</code>\n" .
-                                          "💬 <b>Pesan Asli User:</b> <i>\"" . ($text ?: '[Hanya Mengirim Gambar Bukti]') . "\"</i>\n\n" .
-                                          "⚙️ <i>Status: Menunggu validasi Anda di website admin.</i>";
-                            $this->kirimPesan($adminId, $pesanAdmin);
-
-                        } catch (\Exception $e) {
-                            $this->kirimPesan($chatId, "⚠️ <b>DATABASE ERROR!</b>\n\nDetail Eror:\n<code>" . $e->getMessage() . "</code>");
-                        }
-                    } else {
-                        // Jika chat bener-bener di luar konteks pendaftaran sosmed (misal mengetik "iseng aja", "tes")
-                        $tombolPaket = [
-                            'inline_keyboard' => [
-                                [
-                                    ['text' => '📦 Paket 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
-                                    ['text' => '📦 Paket 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
-                                ],
-                                [
-                                    ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
-                                ]
-                            ]
-                        ];
-                        $pesanGagal = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan di sosial media, silakan ketik nama akun sosial media Kakak secara jelas agar AI dapat merekamnya!\n\n<i>Contoh: \"ig hayu kuya\" atau \"facebook akbar luis\"</i>";
-                        $this->kirimPesan($chatId, $pesanGagal, $tombolPaket);
-                    }
-                    return response()->json(['status' => 'success'], 200);
+                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini. Atau jika Anda sudah berlangganan di sosial media, silakan ketik nama akun dan platform Anda agar AI dapat mendatanya secara otomatis!\n\n<i>Contoh bebas: \"ig hayu kuya\" atau \"facebook akbar luis\"</i>";
+                    $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
                 }
+                
+                return response()->json(['status' => 'success'], 200);
             }
         }
 
@@ -186,7 +185,7 @@ class TelegramController extends Controller
     }
 
     // ==========================================
-    // 🧠 PROMPT ENGINE GROQ CLOUD (LLAMA 3 SUPER INTELIGENCE)
+    // 🧠 PROMPT ENGINE GROQ CLOUD (SANGAT FLEKSIBEL)
     // ==========================================
     private function analisisTeksDenganGroq($userText)
     {
@@ -195,7 +194,6 @@ class TelegramController extends Controller
             return ['is_valid_social_input' => false];
         }
 
-        // Prompt dimatangkan penuh agar mentolerir segala jenis variasi nama buatan manusia (termasuk spasi)
         $systemPrompt = "You are a backend AI data extraction system. Your single task is to analyze raw chat from Telegram users who want to confirm their social media account subscription.\n" .
                         "You must extract the PLATFORM (instagram, facebook, or tiktok) and the ACCOUNT NAME/USERNAME (can contain spaces, dots, or characters) and return a strict JSON object.\n\n" .
                         "The JSON format MUST be exactly like this:\n" .
@@ -207,7 +205,7 @@ class TelegramController extends Controller
                         "Rules:\n" .
                         "1. Normalize shortcuts: 'tt'/'tiktokan' -> 'tiktok', 'ig'/'insta' -> 'instagram', 'fb'/'facebook' -> 'facebook'.\n" .
                         "2. If the user only provides an account name without explicitly mentioning the platform (e.g., \"akbar zikri\" or \"hayu kuya\"), guess the most logical platform or default it to \"facebook\", and set \"is_valid_social_input\" to true.\n" .
-                        "3. If the chat is completely unrelated to social media confirmation (e.g., \"hello\", \"test\", \"p\", \"how are you\"), set \"is_valid_social_input\" to false.\n" .
+                        "3. If the chat is completely unrelated to social media confirmation (e.g., greetings, general questions like \"how are you\"), set \"is_valid_social_input\" to false.\n" .
                         "4. Output ONLY the raw JSON object. Do not include any markdown, backticks, or conversational text.";
 
         try {
@@ -236,7 +234,7 @@ class TelegramController extends Controller
     }
 
     // ==========================================
-    // INTEGRASI DATA PEMBAYARAN IPAYMU
+    // LOGIKA INTEGRASI API IPAYMU & FUNGSI UTILITY
     // ==========================================
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
