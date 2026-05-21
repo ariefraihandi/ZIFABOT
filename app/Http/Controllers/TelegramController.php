@@ -14,7 +14,7 @@ class TelegramController extends Controller
         $update = $request->all();
         Log::info('Telegram Update: ', $update);
 
-        $adminId = "1938818581"; // 🆔 ID Admin Utama
+        $adminId = "6233785877"; // 🆔 ID Admin Utama
 
         // ==========================================
         // 1. LOGIKA JIKA USER KLIK TOMBOL (CALLBACK)
