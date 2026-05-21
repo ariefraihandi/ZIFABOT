@@ -24,10 +24,8 @@ class TelegramController extends Controller
             $callbackQueryId = $callbackQuery['id'];
             $name = $callbackQuery['from']['first_name'];
 
-            // HENTIKAN LOADING SPINNER DI TELEGRAM
             $this->answerCallbackQuery($callbackQueryId);
 
-            // Respon berdasarkan tombol yang diklik (TANPA AI)
             if ($callbackData === 'paket_1_bulan') {
                 $pesan = "💳 <b>PILIHAN: PAKET 1 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 1 Bulan.\n\n💵 <b>Total Tagihan:</b> Rp 50.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
                 $this->kirimPesan($chatId, $pesan);
@@ -39,7 +37,7 @@ class TelegramController extends Controller
             } 
             
             elseif ($callbackData === 'tanya_ai') {
-                $pesan = "🤖 <b>MODE ASISTEN AI AKTIF</b>\n\nSilakan ketik pertanyaan kamu secara langsung di bawah ini (contoh: <i>'Apa saja keuntungan gabung Crown?'</i>). Ziva akan langsung menjawabnya!";
+                $pesan = "🤖 <b>MODE ASISTEN AI AKTIF</b>\n\nSilakan ketik pertanyaan kamu secara langsung di bawah ini (contoh: <i>'Apa saja keuntungan gabung?'</i>). Ziva akan langsung menjawabnya!";
                 $this->kirimPesan($chatId, $pesan);
             }
 
@@ -56,7 +54,6 @@ class TelegramController extends Controller
             $from = $update['message']['from'];
             $telegramId = $from['id'];
 
-            // Abaikan chat di dalam grup/channel
             if ($chatType === 'group' || $chatType === 'supergroup') {
                 if (str_starts_with($text, '/id')) {
                     $this->kirimPesan($chatId, "ID ini adalah: <code>{$chatId}</code>");
@@ -68,13 +65,11 @@ class TelegramController extends Controller
                 $username = $from['username'] ?? null;
                 $name = $from['first_name'] . (isset($from['last_name']) ? ' ' . $from['last_name'] : '');
 
-                // Daftarkan user ke DB jika belum ada
                 $user = TelegramUser::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     ['username' => $username, 'name' => $name, 'role' => ($telegramId == env('TELEGRAM_SUPER_ADMIN_ID')) ? 'admin' : 'member', 'status' => 'none']
                 );
 
-                // STRUKTUR TOMBOL PENAWARAN (INLINE KEYBOARD)
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
@@ -87,22 +82,21 @@ class TelegramController extends Controller
                     ]
                 ];
 
-                // JIKA CHAT ADALAH UTAMA ATAU KATA KUNCI STRUKTUR UTAMA
-                // Setiap ada chat masuk, langsung sodorkan harga paket
+                // KATA KUNCI UTAMA UNTUK MENAMPILKAN PENAWARAN (SUDAH DIUBAH)
                 if ($text === '/start' || strtolower($text) === 'halo' || strtolower($text) === 'p') {
-                    $pesanPenyambutan = "👋 <b>Halo {$name}! Selamat datang di ZIFABOT.</b>\n\nIngin akses konten premium eksklusif dari <b>Crown Collective</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
+                    $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
                     
                     $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 } 
                 
-                // JIKA USER BERTANYA HAL LAIN -> DIJAWAB OLEH GROQ AI
+                // JIKA CHAT BIASA LAINNYA -> DIJAWAB OLEH GROQ AI
                 else {
                     $groqApiKey = env('GROQ_API_KEY');
 
                     $groqResponse = Http::withToken($groqApiKey)->post('https://api.groq.com/openai/v1/chat/completions', [
                         'model' => 'llama-3.1-8b-instant',
                         'messages' => [
-                            ['role' => 'system', 'content' => 'Kamu adalah Ziva, asisten wanita pintar dari Crown Collective. Jawab dengan ramah dan bahasa Indonesia santai.'],
+                            ['role' => 'system', 'content' => 'Kamu adalah Ziva, asisten wanita pintar dari Ziva Zalina. Jawab dengan ramah, santai, dan solutif menggunakan bahasa Indonesia.'],
                             ['role' => 'user', 'content' => $text]
                         ],
                         'temperature' => 0.7
@@ -115,7 +109,6 @@ class TelegramController extends Controller
                         $balasanAI = 'Ziva sedang istirahat sebentar. Ada yang bisa dibantu lagi?';
                     }
 
-                    // Kirim jawaban AI, dan tetap selipkan tombol paket di bawahnya agar user bisa langsung beli kapan saja!
                     $this->kirimPesan($chatId, $balasanAI, $tombolPaket);
                 }
             }
@@ -124,7 +117,6 @@ class TelegramController extends Controller
         return response()->json(['status' => 'success'], 200);
     }
 
-    // FUNGSI KIRIM PESAN DENGAN DUKUNGAN TOMBOL OPTIONAL
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
     {
         $botToken = env('TELEGRAM_BOT_TOKEN');
@@ -141,7 +133,6 @@ class TelegramController extends Controller
         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", $payload);
     }
 
-    // FUNGSI UNTUK MERESPON KLIK TOMBOL TELEGRAM
     private function answerCallbackQuery($callbackQueryId)
     {
         $botToken = env('TELEGRAM_BOT_TOKEN');
