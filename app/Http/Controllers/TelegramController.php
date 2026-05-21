@@ -24,20 +24,24 @@ class TelegramController extends Controller
             $callbackQueryId = $callbackQuery['id'];
             $name = $callbackQuery['from']['first_name'];
 
+            // Hentikan loading spinner di aplikasi Telegram user
             $this->answerCallbackQuery($callbackQueryId);
 
+            // Paket 1 Bulan
             if ($callbackData === 'paket_1_bulan') {
-                $pesan = "💳 <b>PILIHAN: PAKET 1 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 1 Bulan.\n\n💵 <b>Total Tagihan:</b> Rp 50.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
+                $pesan = "💳 <b>PILIHAN: PAKET 1 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 1 Bulan.\n\n💵 <b>Total Tagihan:</b> Rp 45.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
                 $this->kirimPesan($chatId, $pesan);
             } 
             
-            elseif ($callbackData === 'paket_2_bulan') {
-                $pesan = "💳 <b>PILIHAN: PAKET 2 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 2 Bulan (Lebih Hemat!).\n\n💵 <b>Total Tagihan:</b> Rp 90.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
+            // Paket 3 Bulan
+            elseif ($callbackData === 'paket_3_bulan') {
+                $pesan = "💳 <b>PILIHAN: PAKET 3 BULAN</b>\n\nHalo {$name}, kamu memilih Paket Langganan Zifa selama 3 Bulan.\n\n💵 <b>Total Tagihan:</b> Rp 120.000\n\n👉 <i>Link pembayaran iPaymu akan muncul di sini otomatis pada tahap berikutnya.</i>";
                 $this->kirimPesan($chatId, $pesan);
             } 
             
-            elseif ($callbackData === 'tanya_ai') {
-                $pesan = "🤖 <b>MODE ASISTEN AI AKTIF</b>\n\nSilakan ketik pertanyaan kamu secara langsung di bawah ini (contoh: <i>'Apa saja keuntungan gabung?'</i>). Ziva akan langsung menjawabnya!";
+            // Tombol Sudah Berlangganan di Sosmed
+            elseif ($callbackData === 'sudah_langganan_sosmed') {
+                $pesan = "📲 <b>KONFIRMASI LANGGANAN SOSMED</b>\n\nSilahkan balas dengan nama sosial media anda dengan format:\n<code>fb nama akun fb</code>\n\n<i>Atau jika dari platform lain:</i>\n<code>ig nama akun ig</code>\n<code>tiktok nama akun tiktok</code>";
                 $this->kirimPesan($chatId, $pesan);
             }
 
@@ -54,6 +58,7 @@ class TelegramController extends Controller
             $from = $update['message']['from'];
             $telegramId = $from['id'];
 
+            // Abaikan chat di dalam grup/channel
             if ($chatType === 'group' || $chatType === 'supergroup') {
                 if (str_starts_with($text, '/id')) {
                     $this->kirimPesan($chatId, "ID ini adalah: <code>{$chatId}</code>");
@@ -65,51 +70,49 @@ class TelegramController extends Controller
                 $username = $from['username'] ?? null;
                 $name = $from['first_name'] . (isset($from['last_name']) ? ' ' . $from['last_name'] : '');
 
+                // Daftarkan user ke DB jika belum ada
                 $user = TelegramUser::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     ['username' => $username, 'name' => $name, 'role' => ($telegramId == env('TELEGRAM_SUPER_ADMIN_ID')) ? 'admin' : 'member', 'status' => 'none']
                 );
 
+                // STRUKTUR TOMBOL TERBARU (TANPA AI)
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '📦 Paket 1 Bulan - Rp50k', 'callback_data' => 'paket_1_bulan'],
-                            ['text' => '📦 Paket 2 Bulan - Rp90k', 'callback_data' => 'paket_2_bulan']
+                            ['text' => '📦 Paket 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
+                            ['text' => '📦 Paket 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
                         ],
                         [
-                            ['text' => '💬 Tanya Jawab dengan Ziva (AI)', 'callback_data' => 'tanya_ai']
+                            ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
                         ]
                     ]
                 ];
 
-                // KATA KUNCI UTAMA UNTUK MENAMPILKAN PENAWARAN (SUDAH DIUBAH)
-                if ($text === '/start' || strtolower($text) === 'halo' || strtolower($text) === 'p') {
+                $textLower = strtolower($text);
+
+                // JIKA USER MENGETIK /START, HALO, ATAU P
+                if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
                     $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Zifa di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Ziva Zalina</b>? Yuk, langsung gabung layanan langganan Zifa!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
                     
                     $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
                 } 
                 
-                // JIKA CHAT BIASA LAINNYA -> DIJAWAB OLEH GROQ AI
+                // DETEKSI OTOMATIS JIKA USER MEMBALAS DENGAN FORMAT SOSIAL MEDIA
+                elseif (str_starts_with($textLower, 'fb ') || str_starts_with($textLower, 'ig ') || str_starts_with($textLower, 'tiktok ')) {
+                    $pesanKonfirmasi = "✅ <b>Data Konfirmasi Diterima!</b>\n\nTerima kasih {$name}, laporan akun sosial media kamu (<code>{$text}</code>) telah kami catat.\n\nAdmin akan segera melakukan verifikasi manual untuk mengecek langganan kamu dan membuka akses channel premium. Mohon ditunggu ya! 🙏";
+                    
+                    $this->kirimPesan($chatId, $pesanKonfirmasi);
+                    
+                    // Mencatat ke sistem log cPanel agar kamu bisa memantau kiriman sosmed user
+                    Log::info("SOSMED SUBMISSION: User {$name} ({$chatId}) mengirimkan data: {$text}");
+                } 
+                
+                // JIKA CHAT BIASA TANPA FORMAT -> DIARAHKAN KEMBALI KE MENU UTAMA
                 else {
-                    $groqApiKey = env('GROQ_API_KEY');
-
-                    $groqResponse = Http::withToken($groqApiKey)->post('https://api.groq.com/openai/v1/chat/completions', [
-                        'model' => 'llama-3.1-8b-instant',
-                        'messages' => [
-                            ['role' => 'system', 'content' => 'Kamu adalah Ziva, asisten wanita pintar dari Ziva Zalina. Jawab dengan ramah, santai, dan solutif menggunakan bahasa Indonesia.'],
-                            ['role' => 'user', 'content' => $text]
-                        ],
-                        'temperature' => 0.7
-                    ]);
-
-                    if ($groqResponse->successful()) {
-                        $aiData = $groqResponse->json();
-                        $balasanAI = $aiData['choices'][0]['message']['content'] ?? 'Maaf, saya kurang mengerti.';
-                    } else {
-                        $balasanAI = 'Ziva sedang istirahat sebentar. Ada yang bisa dibantu lagi?';
-                    }
-
-                    $this->kirimPesan($chatId, $balasanAI, $tombolPaket);
+                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan di bawah ini, atau jika sudah berlangganan, ketik konfirmasi dengan format: <code>fb nama akun fb</code>";
+                    
+                    $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
                 }
             }
         }
