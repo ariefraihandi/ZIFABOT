@@ -30,11 +30,7 @@
                     @if(session('success'))
                         <div class="alert alert-success py-2 small">{{ session('success') }}</div>
                     @endif
-
-                    <div class="d-flex justify-content-between align-items-center bg-light p-2 rounded border mb-3 small">
-                        <span class="text-muted">Sinkronisasi ID Pengguna Channel:</span>
-                        <a href="{{ route('satpam.sync') }}" class="btn btn-dark btn-sm font-monospace" style="font-size: 11px;">Sync</a>
-                    </div>
+                   
 
                     <form action="{{ route('social.save', $slug) }}" method="POST">
                         @csrf
