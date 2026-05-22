@@ -37,8 +37,7 @@ class SocialMediaInputController extends Controller
         // ✅ Update social account tanpa menghapus
         $social->update([
             'joined_at' => $tanggalMasuk,
-            'expired_at' => $tanggalExpiredBaru,
-            'is_join' => false // tunggu validasi admin
+            'expired_at' => $tanggalExpiredBaru,            
         ]);
 
         // Update status user Telegram
@@ -88,8 +87,7 @@ class SocialMediaInputController extends Controller
         $social->update([
             'username_sosmed' => $request->username_sosmed,
             'joined_at' => $tanggalMasuk,
-            'expired_at' => $tanggalExpiredBaru,
-            'is_join' => false // tunggu validasi admin
+            'expired_at' => $tanggalExpiredBaru,            
         ]);
 
         // Update status user Telegram
