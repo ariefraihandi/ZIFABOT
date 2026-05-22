@@ -30,6 +30,8 @@ class SocialMediaInputController extends Controller
             'joined_at' => 'required|date'
         ]);
 
+        dd($request->all());
+
         $social = SocialAccount::findOrFail($id);
         $tanggalMasuk = Carbon::parse($request->joined_at);
         $tanggalExpiredBaru = $tanggalMasuk->copy()->addDays(30);
