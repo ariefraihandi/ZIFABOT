@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\TelegramUser;
 use App\Models\SocialAccount;
 use App\Models\Payment;
+use Carbon\Carbon;
 
 class TelegramController extends Controller
 {
@@ -268,15 +269,16 @@ class TelegramController extends Controller
             ->first();
 
         if ($existingPayment) {
-            if ($existingPayment->package === $packageName) {
-                // Paket sama, gunakan session/invoice lama
-                $paymentUrl = $existingPayment->session_id; // simpan URL invoice di session_id
-                $pesanTagihan = "💳 <b>NOTA TAGIHAN AKTIF</b>\n\nHalo {$name}, kamu sudah memiliki tagihan aktif untuk paket <b>{$packageName}</b>.\n\nSilakan klik tombol di bawah untuk membayar:";
-                $tombolBayar = ['inline_keyboard' => [[['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]]]];
-                $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
+            $expiredAt = Carbon::parse($existingPayment->expired_at ?? now());
+            $daysLeft = $expiredAt->diffInDays(now(), false); // negatif jika sudah lewat
+
+            if ($daysLeft > 5) {
+                // Masih lebih dari 5 hari → tampilkan notif
+                $pesan = "💡 Kamu sudah berlangganan paket <b>{$packageName}</b>.\nMasa aktif masih {$daysLeft} hari.\nInvoice baru hanya bisa dibuat 5 hari sebelum expired.";
+                $this->kirimPesan($chatId, $pesan);
                 return;
-            } 
-            // Paket berbeda → buat invoice baru (lanjut ke langkah berikut)
+            }
+            // Jika 5 hari atau kurang, lanjut buat invoice baru
         }
 
         // 2. Buat invoice baru di iPaymu
@@ -316,7 +318,7 @@ class TelegramController extends Controller
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'] ?? '';
 
-                // 3. Simpan session_id (URL) di DB
+                // Simpan session_id (URL) di DB
                 Payment::updateOrCreate(
                     ['telegram_id' => $telegramId, 'status' => 'pending'],
                     [

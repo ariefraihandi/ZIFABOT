@@ -10,7 +10,8 @@ class SocialAccount extends Model
         'telegram_id',
         'platform',
         'username_sosmed',
-        'joined_at', // 🛠️ Tambahkan ini
+        'joined_at',   // tanggal masuk sosial media
+        'expired_at',  // tanggal expired akun
         'persona_slug'
     ];
 }
