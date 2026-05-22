@@ -75,8 +75,7 @@ class SocialMediaInputController extends Controller
 
         return redirect()->back()->with('success', 'Akun berhasil divalidasi, Tanggal Masuk & Expired telah diperbarui!');
     }
-
-    // Update akun sosial media (koreksi)
+    
     public function updateAccount(Request $request, $id)
     {
         $request->validate([
@@ -105,15 +104,36 @@ class SocialMediaInputController extends Controller
             ]);
         }
 
-        // Kirim notifikasi koreksi
+        // 🔑 AMBIL TOKEN & GROUP ID DARI .ENV
         $botToken = env('TELEGRAM_BOT_TOKEN');
-        Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
-            'chat_id' => $social->telegram_id,
-            'text' => "✅ <b>DATA TERVERIFIKASI!</b>\n\nAdmin telah mengoreksi dan memvalidasi data Anda.\n\nSilakan cek tautan undangan grup yang sudah kami kirim sebelumnya untuk bergabung. Jika belum ada, segera hubungi Admin!",
-            'parse_mode' => 'HTML'
-        ]);
+        $groupId = env('TELEGRAM_GROUP_ID');
 
-        return redirect()->back()->with('success', 'Data berhasil dikoreksi dan masa aktif diperbarui!');
+        // 🚀 BUAT TAUTAN UNDANGAN BARU SECARA OTOMATIS
+        $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
+            'chat_id' => $groupId, 
+            'member_limit' => 1
+        ]);
+        $inviteData = $inviteResponse->json();
+
+        // 📨 JIKA GENERATE LINK SUKSES, KIRIM NOTIFIKASI BESERTA LINKNYA
+        if (isset($inviteData['ok']) && $inviteData['ok'] === true) {
+            $link = $inviteData['result']['invite_link'];
+            
+            Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                'chat_id' => $social->telegram_id,
+                'text' => "✅ <b>DATA TERVERIFIKASI & DIKOREKSI!</b>\n\nAdmin telah menyesuaikan data akun " . strtoupper($social->platform) . " Anda dengan nama: <b>{$social->username_sosmed}</b>.\n\nMasa aktif grup Anda dihitung ulang 30 hari sejak tanggal masuk (" . $tanggalMasuk->format('d-m-Y') . ").\n\n👇 Silakan klik tautan resmi di bawah ini untuk bergabung ke channel premium:\n👉 {$link}",
+                'parse_mode' => 'HTML'
+            ]);
+        } else {
+            // Fallback: Jika API Telegram gagal generate link, tetap kirim pesan teks standar
+            Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                'chat_id' => $social->telegram_id,
+                'text' => "✅ <b>DATA TERVERIFIKASI!</b>\n\nAdmin telah mengoreksi dan memvalidasi data Anda.\n\nSilakan gunakan tautan undangan grup yang sudah kami kirim sebelumnya untuk bergabung. Jika tautan kadaluarsa, silakan hubungi Admin!",
+                'parse_mode' => 'HTML'
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Data berhasil dikoreksi, masa aktif diperbarui, dan link undangan baru telah dikirim!');
     }
 
     // Reject akun sosial media
