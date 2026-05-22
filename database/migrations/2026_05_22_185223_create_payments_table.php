@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('telegram_id')->unique();
+            $table->bigInteger('telegram_id');
             $table->string('username')->nullable();
             $table->string('name')->nullable();
             $table->string('package')->nullable();
