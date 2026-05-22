@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramController;
-use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SocialMediaInputController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\IpaymuController;

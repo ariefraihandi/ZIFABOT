@@ -26,11 +26,12 @@ class SocialMediaInputController extends Controller
     // Validasi akun sosial media
     public function validateAccount(Request $request, $id)
     {
+          dd($request->all()); 
         $request->validate([
             'joined_at' => 'required|date'
         ]);
 
-        dd($request->all());
+        
 
         $social = SocialAccount::findOrFail($id);
         $tanggalMasuk = Carbon::parse($request->joined_at);
