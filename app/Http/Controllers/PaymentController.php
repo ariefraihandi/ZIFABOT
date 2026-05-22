@@ -122,7 +122,7 @@ class PaymentController extends Controller
                         $inviteLink = $inviteData['result']['invite_link'];
                         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                             'chat_id' => $telegramId,
-                            'text' => "✨ <b>Tautan Undangan:</b>\n{$inviteLink}",
+                            'text' => "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>",
                             'parse_mode' => 'HTML'
                         ]);
                     }
