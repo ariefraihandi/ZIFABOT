@@ -188,7 +188,7 @@ class TelegramController extends Controller
                                       "Hi min, ada member baru ngaku-ngaku udah daftar di <b>{$platformName}</b> dengan nama <code>{$text}</code>.\n\n" .
                                       "👤 <b>Nama Tele User:</b> {$name}\n" .
                                       "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n\n" .
-                                      "🔗 <b>Cek Sekarang:</b> https://zifabot.bilikmedia.com/input/zifazalina\n\n" .
+                                      "🔗 <b>Cek Sekarang:</b> https://bilikhukum.com/input/zifazalina\n\n" .
                                       "Tolong di cek dong. aku tunggu ya miiin! 🦾";
 
                         $botToken = env('TELEGRAM_BOT_TOKEN');
@@ -270,9 +270,9 @@ class TelegramController extends Controller
             'product'     => [$packageName],
             'qty'         => ['1'],
             'price'       => [(string)$amount],
-            'returnUrl'   => 'https://zifabot.bilikmedia.com/payment/success',
-            'cancelUrl'   => 'https://zifabot.bilikmedia.com/payment/cancel',
-            'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback',
+            'returnUrl'   => 'https://bilikhukum.com/payment/success',
+            'cancelUrl'   => 'https://bilikhukum.com/payment/cancel',
+            'notifyUrl'   => 'https://bilikhukum.com/api/ipaymu/callback',
             'referenceId' => $referenceId,
             'description' => ["Langganan Premium Ziva Zalina"]
         ];
