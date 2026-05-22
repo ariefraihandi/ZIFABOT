@@ -13,7 +13,7 @@ Route::get('/payment/cancel', [IpaymuController::class, 'cancel']);
 
 Route::post('/telegram/webhook', [TelegramController::class, 'handle']);
 
-Route::post('/ipaymu/callback', [PaymentController::class, 'callback']);
+
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/input/{slug}', [SocialMediaInputController::class, 'showForm'])->name('social.form');
