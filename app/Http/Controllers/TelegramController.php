@@ -263,25 +263,28 @@ class TelegramController extends Controller
     // ==========================================  
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
-        // 1. Cek apakah user punya invoice pending
+        // ========================================================
+        // 1. CEK TAGIHAN PENDING DI DATABASE
+        // ========================================================
         $existingPayment = Payment::where('telegram_id', $telegramId)
             ->where('status', 'pending')
             ->first();
 
         if ($existingPayment) {
-            $expiredAt = Carbon::parse($existingPayment->expired_at ?? now());
-            $daysLeft = $expiredAt->diffInDays(now(), false); // negatif jika sudah lewat
-
-            if ($daysLeft > 5) {
-                // Masih lebih dari 5 hari → tampilkan notif
-                $pesan = "💡 Kamu sudah berlangganan paket <b>{$packageName}</b>.\nMasa aktif masih {$daysLeft} hari.\nInvoice baru hanya bisa dibuat 5 hari sebelum expired.";
-                $this->kirimPesan($chatId, $pesan);
-                return;
-            }
-            // Jika 5 hari atau kurang, lanjut buat invoice baru
+            // JIKA ADA: Gunakan URL invoice lama yang sudah ada di database
+            $paymentUrl = $existingPayment->session_id; 
+            
+            $pesanTagihan = "⚠️ <b>ANDA MEMILIKI TAGIHAN AKTIF</b>\n\nHalo {$name}, sistem mendeteksi Anda masih memiliki pesanan <b>{$existingPayment->package}</b> yang belum dibayar.\n\n👇 Silakan lanjutkan pembayaran Anda melalui tombol di bawah ini sebelum membuat pesanan baru:";
+            
+            $tombolBayar = ['inline_keyboard' => [[['text' => '🚀 Lanjutkan Pembayaran', 'url' => $paymentUrl]]]];
+            $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
+            
+            return; // 🛑 Hentikan kode di sini agar tidak request ulang ke iPaymu!
         }
 
-        // 2. Buat invoice baru di iPaymu
+        // ========================================================
+        // 2. JIKA TIDAK ADA TAGIHAN PENDING: BUAT BARU VIA IPAYMU
+        // ========================================================
         $va = env('IPAYMU_VA');
         $apiKey = env('IPAYMU_API_KEY');
         $url = env('IPAYMU_URL');
@@ -318,7 +321,7 @@ class TelegramController extends Controller
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'] ?? '';
 
-                // Simpan session_id (URL) di DB
+                // Simpan URL invoice baru ke database
                 Payment::updateOrCreate(
                     ['telegram_id' => $telegramId, 'status' => 'pending'],
                     [
@@ -330,8 +333,9 @@ class TelegramController extends Controller
                     ]
                 );
 
-                $pesanTagihan = "💳 <b>NOTA TAGIHAN BERLANGGANAN ZIFA </b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN BERLANGGANAN ZIFA</b>\n\nHalo {$name}, berikut detail pesanan baru kamu:\n\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
                 $tombolBayar = ['inline_keyboard' => [[['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]]]];
+                
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
                 Log::error('iPaymu Error Response: ' . json_encode($resData));
@@ -342,7 +346,6 @@ class TelegramController extends Controller
             $this->kirimPesan($chatId, "⚠️ <b>Terjadi kesalahan sistem.</b> Silakan coba lagi nanti.");
         }
     }
-
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
     {
         $botToken = env('TELEGRAM_BOT_TOKEN');
