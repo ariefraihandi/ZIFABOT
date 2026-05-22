@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use App\Models\TelegramUser;
 use App\Models\SocialAccount;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 
 class SatpamBotCommand extends Command
 {
@@ -28,22 +29,18 @@ class SatpamBotCommand extends Command
         }
 
         // ====================================================
-        // Fitur 1: Mengingatkan User yang 5 Hari Lagi Expired
+        // Fitur 1: Mengingatkan User yang Sisa Langganannya DI BAWAH 5 Hari
         // ====================================================
         
-        // 🧪 MODE UJI COBA: Mendeteksi expired dalam kisaran rentang menit/jam ke depan
-        $startReminder = now()->addDays(5)->startOfMinute();
-        $endReminder = now()->addDays(5)->endOfMinute();
-
-        // 🟢 MODE PRODUKSI (Aktifkan ini nanti kalau sudah fix):
-        // $startReminder = now()->addDays(5)->startOfDay();
-        // $endReminder = now()->addDays(5)->endOfDay();
+        // 🧪 MODE UJI COBA TESTING: Cari semua user yang expired-nya kurang dari atau sama dengan 5 hari lagi dari sekarang
+        $batasReminder = now()->addDays(5);
 
         $usersToRemind = TelegramUser::where('status', 'active')
-            ->whereBetween('expired_at', [$startReminder, $endReminder])
+            ->where('expired_at', '<=', $batasReminder) // Cari yang di bawah 5 hari
+            ->where('expired_at', '>', now())          // Tapi pastikan belum mati/belum masuk waktu kick
             ->get();
 
-        // Struktur menu tombol paket langganan bawaan Kakak
+        // Struktur menu tombol paket langganan bawaan
         $tombolPaket = [
             'inline_keyboard' => [
                 [
@@ -57,7 +54,13 @@ class SatpamBotCommand extends Command
         ];
 
         foreach ($usersToRemind as $remindUser) {
-            $pesanPeringatan = "⚠️ <b>PENGINGAT MASA AKTIF!</b>\n\nHalo <b>{$remindUser->name}</b>, masa langganan premium Anda di channel Ziva Zalina akan berakhir dalam <b>5 hari lagi</b> (" . Carbon::parse($remindUser->expired_at)->format('d-m-Y H:i') . ").\n\nYuk perpanjang masa aktifmu sekarang agar tidak kehilangan akses konten eksklusif! 👇";
+            // Hitung sisa hari/jam secara dinamis agar infonya menarik
+            $sisaWaktu = Carbon::parse($remindUser->expired_at)->diffForHumans(now(), [
+                'syntax' => CarbonInterface::DIFF_RELATIVE_TO_NOW,
+                'parts' => 2,
+            ]);
+
+            $pesanPeringatan = "⚠️ <b>PENGINGAT MASA AKTIF!</b>\n\nHalo <b>{$remindUser->name}</b>, masa langganan premium Anda di channel Ziva Zalina akan berakhir dalam <b>{$sisaWaktu}</b> (" . Carbon::parse($remindUser->expired_at)->format('d-m-Y H:i') . ").\n\nYuk perpanjang masa aktifmu sekarang agar tidak kehilangan akses konten eksklusif! 👇";
             
             Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                 'chat_id' => $remindUser->telegram_id,
