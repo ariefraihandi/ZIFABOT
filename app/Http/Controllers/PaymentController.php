@@ -65,7 +65,7 @@ class PaymentController extends Controller
                     ]
                 );
 
-                if ($user->wasRecentlyCreated === false) {
+                if (!$user->wasRecentlyCreated) {
                     $baseExpired = ($user->expired_at && Carbon::parse($user->expired_at)->isFuture())
                         ? Carbon::parse($user->expired_at)
                         : now();
