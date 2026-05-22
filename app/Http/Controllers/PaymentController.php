@@ -18,7 +18,7 @@ class PaymentController extends Controller
         $status = $request->input('status'); 
         $referenceId = $request->input('reference_id');
 
-        // Pastikan status berhasil
+        // Hanya proses jika status berhasil
         if (strtolower($status) === 'berhasil' || strtolower($status) === 'success') {
             $parts = explode('-', $referenceId);
             if (count($parts) >= 3) {
@@ -28,9 +28,7 @@ class PaymentController extends Controller
                 $botToken = env('TELEGRAM_BOT_TOKEN');
                 $groupId = env('TELEGRAM_GROUP_ID');
 
-                // =========================
-                // 1. Update tabel payments
-                // =========================
+                // 1️⃣ Update payment
                 $payment = Payment::where('telegram_id', $telegramId)
                     ->where('status', 'pending')
                     ->first();
@@ -38,15 +36,12 @@ class PaymentController extends Controller
                 if ($payment) {
                     $payment->update([
                         'status' => 'success',
-                        'paid_at' => now() // optional jika kolom ada
+                        'paid_at' => now()
                     ]);
-
                     Log::info("Payment updated: Telegram ID {$telegramId}, status success");
                 }
 
-                // =========================
-                // 2. Ambil data Telegram user
-                // =========================
+                // 2️⃣ Ambil info Telegram user
                 $telegramName = 'Pelanggan Premium';
                 $telegramUsername = null;
                 try {
@@ -63,9 +58,7 @@ class PaymentController extends Controller
                     Log::error('Gagal getChat Telegram: ' . $e->getMessage());
                 }
 
-                // =========================
-                // 3. Update / create TelegramUser
-                // =========================
+                // 3️⃣ Update/Create TelegramUser
                 $user = TelegramUser::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     [
@@ -90,18 +83,14 @@ class PaymentController extends Controller
                     ]);
                 }
 
-                // =========================
-                // 4. Kirim pesan konfirmasi pembayaran
-                // =========================
+                // 4️⃣ Kirim konfirmasi
                 Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                     'chat_id' => $telegramId,
-                    'text' => "🎉 <b>Pembayaran sudah kami terima!</b>\n\nMohon tunggu sejenak, saya sedang memeriksa status keanggotaan Anda di channel premium Ziva.",
+                    'text' => "🎉 <b>Pembayaran sudah kami terima!</b>\nSilakan tunggu sebentar, sistem sedang memeriksa keanggotaan Anda di channel premium.",
                     'parse_mode' => 'HTML'
                 ]);
 
-                // =========================
-                // 5. Cek apakah user sudah join channel
-                // =========================
+                // 5️⃣ Cek channel Telegram
                 $checkResponse = Http::post("https://api.telegram.org/bot{$botToken}/getChatMember", [
                     'chat_id' => $groupId,
                     'user_id' => $telegramId
@@ -115,18 +104,15 @@ class PaymentController extends Controller
                     }
                 }
 
-                // =========================
-                // 6. Update status user atau buat tautan undangan
-                // =========================
+                // 6️⃣ Update status user atau buat invite link
                 if ($alreadyJoined) {
                     $user->update(['status' => 'active', 'is_join' => true]);
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                         'chat_id' => $telegramId,
-                        'text' => "🥳 <b>Selamat! Masa aktif langganan Anda telah diperpanjang.</b>\n\nSistem mendeteksi Anda sudah berada di dalam channel premium. Selamat menikmati kembali konten eksklusif kami! ✨",
+                        'text' => "🥳 <b>Selamat! Masa aktif langganan Anda telah diperpanjang.</b>",
                         'parse_mode' => 'HTML'
                     ]);
                 } else {
-                    // Buat tautan undangan baru
                     $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
                         'chat_id' => $groupId,
                         'member_limit' => 1
@@ -134,24 +120,16 @@ class PaymentController extends Controller
                     $inviteData = $inviteResponse->json();
                     if ($inviteData['ok'] ?? false) {
                         $inviteLink = $inviteData['result']['invite_link'];
-                        $pesanLink = "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>";
                         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                             'chat_id' => $telegramId,
-                            'text' => $pesanLink,
-                            'parse_mode' => 'HTML'
-                        ]);
-                    } else {
-                        Log::error('Telegram Create Link Failed: ', $inviteData ?? []);
-                        $telegramErrorReason = $inviteData['description'] ?? 'Unknown Error';
-                        Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
-                            'chat_id' => $telegramId,
-                            'text' => "❌ <b>Gagal Membuat Tautan Undangan!</b>\n\n<b>Alasan Telegram:</b> <code>{$telegramErrorReason}</code>\n\n<i>Mohon hubungi Zifa untuk bantuan input manual.</i>",
+                            'text' => "✨ <b>Tautan Undangan:</b>\n{$inviteLink}",
                             'parse_mode' => 'HTML'
                         ]);
                     }
                 }
             }
         }
+
         return response()->json(['status' => 'success'], 200);
     }
 }
