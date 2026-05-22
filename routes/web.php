@@ -10,7 +10,6 @@ use App\Http\Controllers\IpaymuController;
 
 Route::get('/payment/success', [IpaymuController::class, 'success']);
 Route::get('/payment/cancel', [IpaymuController::class, 'cancel']);
-Route::post('/api/ipaymu/callback', [IpaymuController::class, 'callback']);
 
 Route::post('/telegram/webhook', [TelegramController::class, 'handle']);
 
