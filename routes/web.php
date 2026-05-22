@@ -5,7 +5,12 @@ use App\Http\Controllers\TelegramController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SocialMediaInputController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\SatpamBotController;
+use App\Http\Controllers\IpaymuController;
+
+
+Route::get('/payment/success', [IpaymuController::class, 'success']);
+Route::get('/payment/cancel', [IpaymuController::class, 'cancel']);
+Route::post('/api/ipaymu/callback', [IpaymuController::class, 'callback']);
 
 Route::post('/telegram/webhook', [TelegramController::class, 'handle']);
 
