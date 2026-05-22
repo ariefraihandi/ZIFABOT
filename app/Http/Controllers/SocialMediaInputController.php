@@ -34,10 +34,11 @@ class SocialMediaInputController extends Controller
         $tanggalMasuk = Carbon::parse($request->joined_at);
         $tanggalExpiredBaru = $tanggalMasuk->copy()->addDays(30);
 
-        // Update social account, jangan hapus
+        // ✅ Update social account tanpa menghapus
         $social->update([
             'joined_at' => $tanggalMasuk,
-            'expired_at' => $tanggalExpiredBaru
+            'expired_at' => $tanggalExpiredBaru,
+            'is_join' => false // tunggu validasi admin
         ]);
 
         // Update status user Telegram
@@ -83,11 +84,12 @@ class SocialMediaInputController extends Controller
         $tanggalMasuk = Carbon::parse($request->joined_at);
         $tanggalExpiredBaru = $tanggalMasuk->copy()->addDays(30);
 
-        // Update social account, jangan hapus
+        // ✅ Update social account tanpa menghapus
         $social->update([
             'username_sosmed' => $request->username_sosmed,
             'joined_at' => $tanggalMasuk,
-            'expired_at' => $tanggalExpiredBaru
+            'expired_at' => $tanggalExpiredBaru,
+            'is_join' => false // tunggu validasi admin
         ]);
 
         // Update status user Telegram
