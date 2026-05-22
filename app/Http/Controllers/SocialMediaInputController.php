@@ -26,12 +26,12 @@ class SocialMediaInputController extends Controller
     // Validasi akun sosial media
     public function validateAccount(Request $request, $id)
     {
-          dd($request->all()); 
         $request->validate([
             'joined_at' => 'required|date'
-        ]);
-
-        
+            ]);
+            
+            
+            
 
         $social = SocialAccount::findOrFail($id);
         $tanggalMasuk = Carbon::parse($request->joined_at);
@@ -42,6 +42,8 @@ class SocialMediaInputController extends Controller
             'joined_at' => $tanggalMasuk,
             'expired_at' => $tanggalExpiredBaru,            
         ]);
+
+      
 
         // Update status user Telegram
         $user = TelegramUser::where('telegram_id', $social->telegram_id)->first();
