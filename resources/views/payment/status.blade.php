@@ -15,7 +15,7 @@
             <h3>Transaksi Dibatalkan</h3>
             <p>Silakan ulangi pesanan melalui bot jika ingin melanjutkan.</p>
         @endif
-        <a href="https://t.me/username_bot_kakak" class="btn btn-primary mt-3">Kembali ke Bot</a>
+        <a href="https://t.me/zifazalina_bot" class="btn btn-primary mt-3">Kembali ke Bot</a>
     </div>
 </body>
 </html>

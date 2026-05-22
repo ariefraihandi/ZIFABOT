@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use App\Models\TelegramUser;
 use App\Models\SocialAccount;
+use App\Models\Payment;
 
 class TelegramController extends Controller
 {
@@ -258,9 +259,27 @@ class TelegramController extends Controller
 
     // ==========================================
     // 💳 FUNGSI UTUH INTEGRASI IPAYMU DIKEMBALIKAN
-    // ==========================================
+    // ==========================================  
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
+        // 1. Cek apakah user punya invoice pending
+        $existingPayment = Payment::where('telegram_id', $telegramId)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingPayment) {
+            if ($existingPayment->package === $packageName) {
+                // Paket sama, gunakan session/invoice lama
+                $paymentUrl = $existingPayment->session_id; // simpan URL invoice di session_id
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN AKTIF</b>\n\nHalo {$name}, kamu sudah memiliki tagihan aktif untuk paket <b>{$packageName}</b>.\n\nSilakan klik tombol di bawah untuk membayar:";
+                $tombolBayar = ['inline_keyboard' => [[['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]]]];
+                $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
+                return;
+            } 
+            // Paket berbeda → buat invoice baru (lanjut ke langkah berikut)
+        }
+
+        // 2. Buat invoice baru di iPaymu
         $va = env('IPAYMU_VA');
         $apiKey = env('IPAYMU_API_KEY');
         $url = env('IPAYMU_URL');
@@ -296,6 +315,19 @@ class TelegramController extends Controller
 
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'] ?? '';
+
+                // 3. Simpan session_id (URL) di DB
+                Payment::updateOrCreate(
+                    ['telegram_id' => $telegramId, 'status' => 'pending'],
+                    [
+                        'package' => $packageName,
+                        'amount' => $amount,
+                        'session_id' => $paymentUrl,
+                        'username' => null,
+                        'name' => $name,
+                    ]
+                );
+
                 $pesanTagihan = "💳 <b>NOTA TAGIHAN BERLANGGANAN ZIFA </b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
                 $tombolBayar = ['inline_keyboard' => [[['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]]]];
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
@@ -305,6 +337,7 @@ class TelegramController extends Controller
             }
         } catch (\Exception $e) {
             Log::error('iPaymu Exception: ' . $e->getMessage());
+            $this->kirimPesan($chatId, "⚠️ <b>Terjadi kesalahan sistem.</b> Silakan coba lagi nanti.");
         }
     }
 
