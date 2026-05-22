@@ -256,9 +256,56 @@ class TelegramController extends Controller
         return response()->json(['status' => 'success'], 200);
     }
 
+    // ==========================================
+    // 💳 FUNGSI UTUH INTEGRASI IPAYMU DIKEMBALIKAN
+    // ==========================================
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $months)
     {
-        // ... Logika iPaymu ...
+        $va = env('IPAYMU_VA');
+        $apiKey = env('IPAYMU_API_KEY');
+        $url = env('IPAYMU_URL');
+        $referenceId = "ZIFABOT-" . $telegramId . "-" . $months . "bln-" . time();
+
+        $body = [
+            'product'     => [$packageName],
+            'qty'         => ['1'],
+            'price'       => [(string)$amount],
+            'returnUrl'   => 'https://zifabot.bilikmedia.com/payment/success',
+            'cancelUrl'   => 'https://zifabot.bilikmedia.com/payment/cancel',
+            'notifyUrl'   => 'https://zifabot.bilikmedia.com/api/ipaymu/callback',
+            'referenceId' => $referenceId,
+            'description' => ["Langganan Premium Ziva Zalina"]
+        ];
+
+        $jsonBody     = json_encode($body, JSON_UNESCAPED_SLASHES);
+        $requestBody  = strtolower(hash('sha256', $jsonBody));
+        $stringToSign = 'POST:' . $va . ':' . $requestBody . ':' . $apiKey;
+        $signature    = hash_hmac('sha256', $stringToSign, $apiKey);
+        $timestamp    = date('YmdHis');
+
+        try {
+            $response = Http::withHeaders([
+                'Accept'       => 'application/json',
+                'Content-Type' => 'application/json',
+                'va'           => $va,
+                'signature'    => $signature,
+                'timestamp'    => $timestamp
+            ])->withBody($jsonBody, 'application/json')->post($url);
+
+            $resData = $response->json();
+
+            if (isset($resData['Status']) && $resData['Status'] == 200) {
+                $paymentUrl = $resData['Data']['Url'] ?? '';
+                $pesanTagihan = "💳 <b>NOTA TAGIHAN BERLANGGANAN ZIFA </b>\n\nHalo {$name}, berikut detail pesanan kamu:\n\n📦 <b>Produk:</b> {$packageName}\n💵 <b>Total Tagihan:</b> Rp " . number_format($amount, 0, ',', '.') . "\n\n👇 Silakan klik tombol di bawah ini untuk membayar via iPaymu:";
+                $tombolBayar = ['inline_keyboard' => [[['text' => '🚀 Bayar Sekarang', 'url' => $paymentUrl]]]];
+                $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
+            } else {
+                Log::error('iPaymu Error Response: ' . json_encode($resData));
+                $this->kirimPesan($chatId, "⚠️ <b>Terjadi kesalahan saat membuat tagihan.</b> Silakan coba lagi nanti.");
+            }
+        } catch (\Exception $e) {
+            Log::error('iPaymu Exception: ' . $e->getMessage());
+        }
     }
 
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
