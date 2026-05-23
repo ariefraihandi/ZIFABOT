@@ -6,9 +6,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
-use App\Models\TelegramUser;
-use App\Models\SocialAccount;
-use App\Models\Payment;
+// 🌟 MENGGUNAKAN MODEL KHUSUS AMANDA
+use App\Models\AmandaTelegramUser;
+use App\Models\AmandaSocialAccount;
+use App\Models\AmandaPayment;
 use Carbon\Carbon;
 
 class AmandaTelegramController extends Controller
@@ -18,7 +19,7 @@ class AmandaTelegramController extends Controller
         $update = $request->all();
         Log::info('Telegram Amanda Update: ', $update);
 
-        $adminId = "6233785877"; // 🆔 ID Admin Utama Kakak
+        $adminId = "6233785877"; // 🆔 ID Admin Utama
 
         // ==========================================
         // 🌟 DAFTARKAN INGATAN BOT DI AWAL
@@ -31,7 +32,8 @@ class AmandaTelegramController extends Controller
 
         $user = null;
         if ($telegramId) {
-            $user = TelegramUser::firstOrCreate(
+            // Menggunakan AmandaTelegramUser
+            $user = AmandaTelegramUser::firstOrCreate(
                 ['telegram_id' => $telegramId],
                 ['username' => $username, 'name' => $name, 'role' => ($telegramId == $adminId) ? 'admin' : 'member', 'status' => 'none']
             );
@@ -48,8 +50,8 @@ class AmandaTelegramController extends Controller
 
             $this->answerCallbackQuery($callbackQueryId);
 
-            // Cek apakah user sudah pernah mengajukan (ada di DB sosmed)
-            $isAlreadySubmitted = SocialAccount::where('telegram_id', $telegramId)->exists();
+            // Cek apakah user sudah pernah mengajukan (Menggunakan AmandaSocialAccount)
+            $isAlreadySubmitted = AmandaSocialAccount::where('telegram_id', $telegramId)->exists();
 
             // --- PILIHAN 3 PAKET NOTA UTAMA ---
             if ($callbackData === 'paket_1_minggu') {
@@ -125,7 +127,8 @@ class AmandaTelegramController extends Controller
 
             if ($chatType === 'private') {
                 $textLower = strtolower($text);
-                $isAlreadySubmitted = SocialAccount::where('telegram_id', $telegramId)->exists();
+                // Menggunakan AmandaSocialAccount
+                $isAlreadySubmitted = AmandaSocialAccount::where('telegram_id', $telegramId)->exists();
 
                 // --- 📸 SIMPAN GAMBAR BUKTI KE CACHE ---
                 if (isset($message['photo'])) {
@@ -182,8 +185,8 @@ class AmandaTelegramController extends Controller
                     $platformName = strtoupper($currentPlatform);
 
                     try {
-                        // 1. INPUT KE DATABASE (Gunakan slug amandazulfa)
-                        SocialAccount::updateOrCreate(
+                        // 1. INPUT KE DATABASE (Menggunakan AmandaSocialAccount)
+                        AmandaSocialAccount::updateOrCreate(
                             ['telegram_id' => $telegramId, 'platform' => $currentPlatform],
                             ['username_sosmed' => $text, 'persona_slug' => 'amandazulfa', 'joined_at' => now()]
                         );
@@ -196,7 +199,7 @@ class AmandaTelegramController extends Controller
                                       "Hi min, ada member baru daftar di <b>{$platformName}</b> Amanda dengan nama <code>{$text}</code>.\n\n" .
                                       "👤 <b>Nama Tele User:</b> {$name}\n" .
                                       "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n\n" .
-                                      "🔗 <b>Cek Sekarang:</b> https://bilikhukum.com/input/amandazulfann" .
+                                      "🔗 <b>Cek Sekarang:</b> https://bilikhukum.com/input/amandazulfa\n\n" .
                                       "Tolong di cek dong min! 🦾";
 
                         $tombolAdmin = [
@@ -280,7 +283,8 @@ class AmandaTelegramController extends Controller
     // ==========================================  
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $durationCode)
     {
-        $existingPayment = Payment::where('telegram_id', $telegramId)
+        // Menggunakan AmandaPayment
+        $existingPayment = AmandaPayment::where('telegram_id', $telegramId)
             ->where('status', 'pending')
             ->first();
 
@@ -329,7 +333,8 @@ class AmandaTelegramController extends Controller
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'] ?? '';
 
-                Payment::updateOrCreate(
+                // Menggunakan AmandaPayment
+                AmandaPayment::updateOrCreate(
                     ['telegram_id' => $telegramId, 'status' => 'pending'],
                     [
                         'package' => $packageName,
@@ -345,20 +350,18 @@ class AmandaTelegramController extends Controller
                 
                 $this->kirimPesan($chatId, $pesanTagihan, $tombolBayar);
             } else {
-                Log::error('iPaymu Error Response: ' . json_encode($resData));
+                Log::error('iPaymu Amanda Error Response: ' . json_encode($resData));
                 $this->kirimPesan($chatId, "⚠️ <b>Terjadi kesalahan saat membuat tagihan.</b> Silakan coba lagi nanti.");
             }
         } catch (\Exception $e) {
-            Log::error('iPaymu Exception: ' . $e->getMessage());
+            Log::error('iPaymu Amanda Exception: ' . $e->getMessage());
             $this->kirimPesan($chatId, "⚠️ <b>Terjadi kesalahan sistem.</b> Silakan coba lagi nanti.");
         }
     }
 
     private function kirimPesan($chatId, $pesan, $replyMarkup = null)
     {
-        // 🌟 PERHATIAN: Gunakan token Amanda di sini
         $botToken = env('TELEGRAM_BOT_TOKEN_AMANDA');
-        
         $payload = ['chat_id' => $chatId, 'text' => $pesan, 'parse_mode' => 'HTML'];
         if ($replyMarkup) { $payload['reply_markup'] = json_encode($replyMarkup); }
         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", $payload);
@@ -366,9 +369,7 @@ class AmandaTelegramController extends Controller
 
     private function answerCallbackQuery($callbackQueryId)
     {
-        // 🌟 PERHATIAN: Gunakan token Amanda di sini
         $botToken = env('TELEGRAM_BOT_TOKEN_AMANDA');
-        
         Http::post("https://api.telegram.org/bot{$botToken}/answerCallbackQuery", ['callback_query_id' => $callbackQueryId]);
     }
 }

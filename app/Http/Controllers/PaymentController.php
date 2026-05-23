@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+// 🌟 IMPOR KEDUA JENIS MODEL (ZIFA & AMANDA)
 use App\Models\Payment;
 use App\Models\TelegramUser;
+use App\Models\AmandaPayment;
+use App\Models\AmandaTelegramUser;
 use Carbon\Carbon;
 
 class PaymentController extends Controller
@@ -21,15 +24,47 @@ class PaymentController extends Controller
         // Hanya proses jika status berhasil
         if (strtolower($status) === 'berhasil' || strtolower($status) === 'success') {
             $parts = explode('-', $referenceId);
+            
+            // Format yang diharapkan: BOTNAME-TELEGRAMID-DURASI-TIMESTAMP
             if (count($parts) >= 3) {
+                $botType = strtoupper($parts[0]); // AMANDABOT atau ZIFABOT
                 $telegramId = $parts[1];
-                $months = (int)$parts[2]; 
+                $durationRaw = strtolower($parts[2]); // 1minggu, 1bulan, 1bln, dll
 
-                $botToken = env('TELEGRAM_BOT_TOKEN');
-                $groupId = env('TELEGRAM_GROUP_ID');
+                // ==========================================
+                // ⚙️ KONFIGURASI DAN SWITCH MODEL DATA BINDING
+                // ==========================================
+                if ($botType === 'AMANDABOT') {
+                    $botToken     = env('TELEGRAM_BOT_TOKEN_AMANDA');
+                    $groupId      = env('TELEGRAM_GROUP_ID_AMANDA');
+                    $personaName  = 'Amanda Zulfa';
+                    
+                    // Gunakan Model Kelas Amanda
+                    $paymentModel = AmandaPayment::class;
+                    $userModel    = AmandaTelegramUser::class;
+                } else {
+                    $botToken     = env('TELEGRAM_BOT_TOKEN');
+                    $groupId      = env('TELEGRAM_GROUP_ID'); // -1003907342961
+                    $personaName  = 'Ziva Zalina';
+                    
+                    // Gunakan Model Kelas Ziva
+                    $paymentModel = Payment::class;
+                    $userModel    = TelegramUser::class;
+                }
 
-                // 1️⃣ Update payment
-                $payment = Payment::where('telegram_id', $telegramId)
+                // ==========================================
+                // ⏱️ KALKULASI PARSING DURASI SINKRONISASI
+                // ==========================================
+                $durationVal = (int) filter_var($durationRaw, FILTER_SANITIZE_NUMBER_INT);
+                if (str_contains($durationRaw, 'minggu')) {
+                    $addTime = fn($date) => $date->addWeeks($durationVal);
+                } else {
+                    // Default fallback bulanan (bln/bulan)
+                    $addTime = fn($date) => $date->addMonths($durationVal);
+                }
+
+                // 1️⃣ Update data payment di database masing-masing bot
+                $payment = $paymentModel::where('telegram_id', $telegramId)
                     ->where('status', 'pending')
                     ->first();
 
@@ -38,10 +73,10 @@ class PaymentController extends Controller
                         'status' => 'success',
                         'paid_at' => now()
                     ]);
-                    Log::info("Payment updated: Telegram ID {$telegramId}, status success");
+                    Log::info("Payment updated: {$botType} - Telegram ID {$telegramId}, status success");
                 }
 
-                // 2️⃣ Ambil info Telegram user
+                // 2️⃣ Ambil info profil Telegram user dari Bot API yang sesuai
                 $telegramName = 'Pelanggan Premium';
                 $telegramUsername = null;
                 try {
@@ -55,11 +90,11 @@ class PaymentController extends Controller
                         $telegramUsername = $chatResult['username'] ?? null;
                     }
                 } catch (\Exception $e) {
-                    Log::error('Gagal getChat Telegram: ' . $e->getMessage());
+                    Log::error("Gagal getChat Telegram ({$botType}): " . $e->getMessage());
                 }
 
-                // 3️⃣ Update/Create TelegramUser
-                $user = TelegramUser::firstOrCreate(
+                // 3️⃣ Update/Create Telegram User di tabel database yang sesuai
+                $user = $userModel::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     [
                         'name' => $telegramName,
@@ -67,7 +102,7 @@ class PaymentController extends Controller
                         'role' => 'member',
                         'status' => 'paid',
                         'is_join' => null,
-                        'expired_at' => now()->addMonths($months)
+                        'expired_at' => $addTime(now())
                     ]
                 );
 
@@ -75,22 +110,23 @@ class PaymentController extends Controller
                     $baseExpired = ($user->expired_at && Carbon::parse($user->expired_at)->isFuture())
                         ? Carbon::parse($user->expired_at)
                         : now();
+                        
                     $user->update([
                         'name' => $telegramName,
                         'username' => $telegramUsername,
                         'status' => 'paid',
-                        'expired_at' => $baseExpired->addMonths($months)
+                        'expired_at' => $addTime($baseExpired)
                     ]);
                 }
 
-                // 4️⃣ Kirim konfirmasi
+                // 4️⃣ Kirim pesan konfirmasi pembayaran ke user via Bot terkait
                 Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                     'chat_id' => $telegramId,
-                    'text' => "🎉 <b>Pembayaran sudah kami terima!</b>\nSilakan tunggu sebentar, sistem sedang memeriksa keanggotaan Anda di channel premium.",
+                    'text' => "🎉 <b>Pembayaran sudah kami terima!</b>\nSilakan tunggu sebentar, sistem sedang memeriksa keanggotaan Anda di channel premium {$personaName}.",
                     'parse_mode' => 'HTML'
                 ]);
 
-                // 5️⃣ Cek channel Telegram
+                // 5️⃣ Periksa apakah user sudah bergabung di Channel/Grup tujuan
                 $checkResponse = Http::post("https://api.telegram.org/bot{$botToken}/getChatMember", [
                     'chat_id' => $groupId,
                     'user_id' => $telegramId
@@ -104,12 +140,12 @@ class PaymentController extends Controller
                     }
                 }
 
-                // 6️⃣ Update status user atau buat invite link
+                // 6️⃣ Update status keanggotaan lokal atau generate link tautan baru
                 if ($alreadyJoined) {
                     $user->update(['status' => 'active', 'is_join' => true]);
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                         'chat_id' => $telegramId,
-                        'text' => "🥳 <b>Selamat! Masa aktif langganan Anda telah diperpanjang.</b>",
+                        'text' => "🥳 <b>Selamat! Masa aktif langganan Anda di channel {$personaName} telah diperpanjang.</b>",
                         'parse_mode' => 'HTML'
                     ]);
                 } else {
@@ -118,13 +154,16 @@ class PaymentController extends Controller
                         'member_limit' => 1
                     ]);
                     $inviteData = $inviteResponse->json();
+                    
                     if ($inviteData['ok'] ?? false) {
                         $inviteLink = $inviteData['result']['invite_link'];
                         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                             'chat_id' => $telegramId,
-                            'text' => "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>",
+                            'text' => "✨ <b>Tautan Undangan Anda Sudah Siap!</b>\n\nSilakan klik tautan di bawah ini untuk bergabung ke channel premium {$personaName}:\n👉 {$inviteLink}\n\n⚠️ <i>Note: Tautan ini hanya bisa digunakan oleh 1 orang. Jangan bagikan tautan ini ke orang lain ya!</i>",
                             'parse_mode' => 'HTML'
                         ]);
+                    } else {
+                        Log::error("Gagal membuat invite link bagi {$botType}: " . json_encode($inviteData));
                     }
                 }
             }
