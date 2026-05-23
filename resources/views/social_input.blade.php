@@ -96,9 +96,13 @@
                                     <td class="fw-bold text-start px-3">{{ $account->telegram_name }}</td>
                                     <td><code>{{ $account->telegram_id }}</code></td>
                                     <td>
-                                        @if($account->platform == 'instagram' || $account->platform == 'ig') <span class="badge bg-danger">IG</span>
-                                        @elseif($account->platform == 'tiktok' || $account->platform == 'tt') <span class="badge bg-dark">TT</span>
-                                        @else <span class="badge bg-primary">FB</span> @endif
+                                        @if($account->platform == 'instagram' || $account->platform == 'ig') 
+                                            <span class="badge bg-danger">IG</span>
+                                        @elseif($account->platform == 'tiktok' || $account->platform == 'tt') 
+                                            <span class="badge bg-dark">TT</span>
+                                        @else 
+                                            <span class="badge bg-primary">FB</span> 
+                                        @endif
                                     </td>
                                     <td class="fw-bold text-primary text-start"><code>{{ $account->username_sosmed }}</code></td>
                                     <td>{{ \Carbon\Carbon::parse($account->joined_at)->format('Y-m-d') }}</td>
@@ -108,7 +112,7 @@
 
                                             <button type="button" class="btn btn-warning btn-xs py-0 px-2 fw-bold text-dark" style="font-size:11px;" data-bs-toggle="modal" data-bs-target="#editModal{{ $account->id }}">Edit 📝</button>
 
-                                            <form action="{{ route('social.reject', ['slug' => $slug, 'id' => $socialAccount->id]) }}" method="POST">
+                                            <form action="{{ route('social.reject', ['slug' => $slug, 'id' => $account->id]) }}" method="POST">
                                                 @csrf
                                                 <button type="submit" class="btn btn-danger btn-xs py-0 px-2 fw-bold" style="font-size:11px;">Tolak ❌</button>
                                             </form>
@@ -119,7 +123,7 @@
                                 <div class="modal fade" id="validModal{{ $account->id }}" tabindex="-1" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered modal-sm">
                                         <div class="modal-content">                                            
-                                                <form action="{{ route('social.validate', ['slug' => $slug, 'id' => $socialAccount->id]) }}" method="POST">
+                                            <form action="{{ route('social.validate', ['slug' => $slug, 'id' => $account->id]) }}" method="POST">
                                                 @csrf
                                                 <div class="modal-header bg-success text-white py-2">
                                                     <h6 class="modal-title fw-bold">Konfirmasi Tanggal Masuk</h6>
@@ -143,7 +147,7 @@
                                 <div class="modal fade" id="editModal{{ $account->id }}" tabindex="-1" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered modal-sm">
                                         <div class="modal-content">
-                                            <form action="{{ route('social.update', ['slug' => $slug, 'id' => $socialAccount->id]) }}" method="POST">
+                                            <form action="{{ route('social.update', ['slug' => $slug, 'id' => $account->id]) }}" method="POST">
                                                 @csrf
                                                 <div class="modal-header bg-warning text-dark py-2">
                                                     <h6 class="modal-title fw-bold">Koreksi Data Pengikut</h6>
@@ -169,7 +173,7 @@
 
                                 @empty
                                 <tr>
-                                    <td colspan="6" class="text-muted py-4">Belum ada pengajuan masuk akun sosial media dari pengguna bot.</td>
+                                    <td colspan="6" class="text-muted py-4 text-center">Belum ada pengajuan masuk akun sosial media dari pengguna bot.</td>
                                 </tr>
                                 @endforelse
                             </tbody>
