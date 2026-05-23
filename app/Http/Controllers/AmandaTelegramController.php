@@ -146,12 +146,9 @@ class AmandaTelegramController extends Controller
                         return response()->json(['status' => 'success'], 200);
                     }
 
-                    // TAMPILAN 3 PAKET UNTUK AMANDA
+                    // ✨ REVISI: PAKET PAHE 1 MINGGU SUDAH DIHAPUS TOTAL
                     $tombolPaket = [
                         'inline_keyboard' => [
-                            [
-                                ['text' => '🔥 Pahe (1 Minggu) - Rp15k', 'callback_data' => 'paket_1_minggu']
-                            ],
                             [
                                 ['text' => '📦 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
                                 ['text' => '📦 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
@@ -256,11 +253,9 @@ class AmandaTelegramController extends Controller
                     return response()->json(['status' => 'success'], 200);
                 }
 
+                // ✨ REVISI: PAKET PAHE 1 MINGGU SUDAH DIHAPUS TOTAL
                 $tombolPaket = [
                     'inline_keyboard' => [
-                        [
-                            ['text' => '🔥 Pahe (1 Minggu) - Rp15k', 'callback_data' => 'paket_1_minggu']
-                        ],
                         [
                             ['text' => '📦 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
                             ['text' => '📦 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
