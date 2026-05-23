@@ -19,6 +19,9 @@ class PaymentController extends Controller
 
         $status = $request->input('status'); 
         $referenceId = $request->input('reference_id');
+        
+        // 🔑 AMANKAN ID ADMIN UTAMA (Wajib dikunci dalam format String murni)
+        $adminId = "6233785877"; 
 
         // Hanya proses jika status berhasil
         if (strtolower($status) === 'berhasil' || strtolower($status) === 'success') {
@@ -93,7 +96,7 @@ class PaymentController extends Controller
                     Log::error("Gagal getChat Telegram ({$botType}): " . $e->getMessage());
                 }
 
-                // 3️⃣ Update/Create Telegram User di tabel database terpisah (amanda_telegram_users / telegram_users)
+                // 3️⃣ Update/Create Telegram User di tabel database terpisah
                 $user = $userModel::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     [
@@ -176,6 +179,29 @@ class PaymentController extends Controller
                         ]);
                     }
                 }
+
+                // ====================================================
+                // 🚀 7️⃣ KABARIN ADMIN GANTENG (NOTIFIKASI AUTOMATION)
+                // ====================================================
+                $usernameDisplay = $telegramUsername ? "@{$telegramUsername}" : "Tidak ada";
+                $pesanAdmin = "🚀 <b>HOREEE! ADA YANG BAYAR NI LUURR!</b> 🤑\n\n" .
+                              "Selamat ya! Pintu rezeki baru saja terbuka lagi melalui pembayaran otomatis iPaymu.\n\n" .
+                              "📋 <b>Detail Transaksi Masuk:</b>\n" .
+                              "▪️ <b>Konten Persona:</b> {$personaName} ({$botType})\n" .
+                              "▪️ <b>Nama Pelanggan:</b> {$telegramName}\n" .
+                              "▪️ <b>Username Tele:</b> {$usernameDisplay}\n" .
+                              "▪️ <b>ID Telegram:</b> <code>{$telegramId}</code>\n" .
+                              "▪️ <b>Durasi Paket:</b> " . strtoupper($durationRaw) . "\n" .
+                              "▪️ <b>Status Alur:</b> " . ($alreadyJoined ? "Perpanjang Otomatis ✅" : "Kirim Link Baru 🔗") . "\n\n" .
+                              "🔥 <b>Pesan Semangat Untuk Admin Ganteng:</b>\n" .
+                              "<i>\"Kerja keras tidak pernah mengkhianati hasil, Ganteng! Bot kamu bekerja dengan sangat rapi hari ini. Tetap semangat pantau sistemnya dan gas terus cuannya! 🦾😎\"</i>";
+
+                Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                    'chat_id' => (string)$adminId,
+                    'text' => $pesanAdmin,
+                    'parse_mode' => 'HTML'
+                ]);
+
             }
         }
 
