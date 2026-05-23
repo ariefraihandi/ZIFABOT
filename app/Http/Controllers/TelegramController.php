@@ -193,20 +193,31 @@ class TelegramController extends Controller
                                       "🔗 <b>Cek Sekarang:</b> https://bilikhukum.com/input/zifazalina\n\n" .
                                       "Tolong di cek dong. aku tunggu ya miiin! 🦾";
 
+                        // 🌟 BUAT TOMBOL INLINE UNTUK DIRECT CHAT KE USER
+                        $tombolAdmin = [
+                            'inline_keyboard' => [
+                                [
+                                    ['text' => '💬 Chat Pengguna Langsung', 'url' => "tg://user?id={$telegramId}"]
+                                ]
+                            ]
+                        ];
+
                         $botToken = env('TELEGRAM_BOT_TOKEN');
 
-                        // 4. KIRIM NOTIFIKASI KE ADMIN
+                        // 4. KIRIM NOTIFIKASI KE ADMIN BESERTA TOMBOL INTERVENSI
                         if ($savedPhotoId) { 
                             $responseAdmin = Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
                                 'chat_id' => $adminId,
                                 'photo'   => $savedPhotoId,
                                 'caption' => $pesanAdmin,
+                                'reply_markup' => json_encode($tombolAdmin), // 👈 Pasang tombol di sini
                                 'parse_mode' => 'HTML'
                             ]);
                         } else {
                             $responseAdmin = Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                                 'chat_id' => $adminId,
                                 'text'    => $pesanAdmin,
+                                'reply_markup' => json_encode($tombolAdmin), // 👈 Pasang tombol di sini
                                 'parse_mode' => 'HTML'
                             ]);
                         }
