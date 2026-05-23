@@ -6,7 +6,7 @@
     <title>Panel Pengikut - {{ ucfirst($slug) }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* Mengamankan keterbacaan teks saat baris diberi warna background soft */
+        /* CSS Pewarnaan Baris Lembut (Soft) */
         .table-success-soft {
             background-color: #d1e7dd !important;
             color: #0f5132 !important;
@@ -107,14 +107,17 @@
                             <tbody>
                                 @forelse($socialAccounts as $account)
                                     @php
-                                        // 🌟 LOGIKA PEWARNAAN BARIS TABEL
+                                        // ⚙️ LOGIKA AMANKAN AKURASI PEWARNAAN BARIS TABEL
                                         $rowClass = '';
+                                        
+                                        // 1. Cek jika data sudah dinyatakan valid (kolom expired_at di tabel social ada isi)
                                         if (!empty($account->expired_at)) {
-                                            // Jika status database 'active' atau flag is_join bernilai true/1 -> HIJAU
-                                            if ($account->status === 'active' || $account->is_join == 1) {
+                                            
+                                            // 2. Jika user sudah join di channel (is_join bernilai 1 ATAU status active) -> HIJAU
+                                            if ($account->telegram_is_join == 1 || $account->telegram_status === 'active') {
                                                 $rowClass = 'table-success-soft';
                                             } else {
-                                                // Jika sudah divalidasi (expired_at terisi) tapi belum masuk channel -> KUNING
+                                                // 3. Jika expired_at terisi tapi belum masuk channel -> KUNING
                                                 $rowClass = 'table-warning-soft';
                                             }
                                         }
