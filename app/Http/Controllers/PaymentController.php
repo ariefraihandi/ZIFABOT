@@ -35,16 +35,18 @@ class PaymentController extends Controller
                 // ==========================================
                 if ($botType === 'AMANDABOT') {
                     $botToken     = env('TELEGRAM_BOT_TOKEN_AMANDA');
-                    $groupId      = env('TELEGRAM_GROUP_ID_AMANDA'); // 🌟 Dipastikan memanggil ID Amanda
+                    $groupId      = env('TELEGRAM_GROUP_ID_AMANDA'); 
                     $personaName  = 'Amanda Zulfa';
                     
+                    // Alihkan ke model database Amanda secara total
                     $paymentModel = AmandaPayment::class;
                     $userModel    = AmandaTelegramUser::class;
                 } else {
                     $botToken     = env('TELEGRAM_BOT_TOKEN');
-                    $groupId      = env('TELEGRAM_GROUP_ID'); // -1003907342961
+                    $groupId      = env('TELEGRAM_GROUP_ID'); 
                     $personaName  = 'Ziva Zalina';
                     
+                    // Alihkan ke model database Ziva secara total
                     $paymentModel = Payment::class;
                     $userModel    = TelegramUser::class;
                 }
@@ -59,7 +61,7 @@ class PaymentController extends Controller
                     $addTime = fn($date) => $date->addMonths($durationVal);
                 }
 
-                // 1️⃣ Update data payment di database masing-masing bot
+                // 1️⃣ Update data payment di database spesifik milik bot masing-masing
                 $payment = $paymentModel::where('telegram_id', $telegramId)
                     ->where('status', 'pending')
                     ->first();
@@ -70,9 +72,11 @@ class PaymentController extends Controller
                         'paid_at' => now()
                     ]);
                     Log::info("Payment updated: {$botType} - Telegram ID {$telegramId}, status success");
+                } else {
+                    Log::warning("Invoice pending tidak ditemukan di tabel {$botType} untuk Telegram ID: {$telegramId}");
                 }
 
-                // 2️⃣ Ambil info profil Telegram user
+                // 2️⃣ Ambil info profil Telegram user dari bot API yang sesuai
                 $telegramName = 'Pelanggan Premium';
                 $telegramUsername = null;
                 try {
@@ -89,7 +93,7 @@ class PaymentController extends Controller
                     Log::error("Gagal getChat Telegram ({$botType}): " . $e->getMessage());
                 }
 
-                // 3️⃣ Update/Create Telegram User
+                // 3️⃣ Update/Create Telegram User di tabel database terpisah (amanda_telegram_users / telegram_users)
                 $user = $userModel::firstOrCreate(
                     ['telegram_id' => $telegramId],
                     [
@@ -122,7 +126,7 @@ class PaymentController extends Controller
                     'parse_mode' => 'HTML'
                 ]);
 
-                // 5️⃣ Periksa apakah user sudah bergabung di Channel/Grup tujuan
+                // 5️⃣ Periksa apakah user sudah bergabung di Channel/Grup tujuan yang sesuai
                 $alreadyJoined = false;
                 try {
                     $checkResponse = Http::post("https://api.telegram.org/bot{$botToken}/getChatMember", [
@@ -140,7 +144,7 @@ class PaymentController extends Controller
                     Log::error("Gagal getChatMember bagi {$botType}: " . $e->getMessage());
                 }
 
-                // 6️⃣ Update status keanggotaan lokal atau generate link tautan baru
+                // 6️⃣ Update status keanggotaan lokal atau generate link tautan baru dari channel yang sesuai
                 if ($alreadyJoined) {
                     $user->update(['status' => 'active', 'is_join' => true]);
                     Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
@@ -149,7 +153,7 @@ class PaymentController extends Controller
                         'parse_mode' => 'HTML'
                     ]);
                 } else {
-                    // 🛠️ GENERATE LINK UNDANGAN SESUAI CHANNEL GROUP MASING-MASING BOT
+                    // Generate link undangan dari target groupId (Channel) masing-masing bot
                     $inviteResponse = Http::post("https://api.telegram.org/bot{$botToken}/createChatInviteLink", [
                         'chat_id' => $groupId,
                         'member_limit' => 1
@@ -164,7 +168,6 @@ class PaymentController extends Controller
                             'parse_mode' => 'HTML'
                         ]);
                     } else {
-                        // Jika gagal, berikan log detail serta notifikasi error ke user agar tidak bingung
                         Log::error("Gagal membuat invite link bagi {$botType}. Respons Telegram: " . json_encode($inviteData) . " | Menggunakan Group ID: " . $groupId);
                         Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                             'chat_id' => $telegramId,
