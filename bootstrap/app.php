@@ -3,7 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Console\Scheduling\Schedule; // 🔑 Namespace untuk Scheduler Laravel 11
+use Illuminate\Console\Scheduling\Schedule; // 🔑 Namespace untuk Scheduler
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -17,18 +17,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'telegram/webhook',
             'api/telegram/webhook',
-            'api/ipaymu/callback' // Sekalian saya amankan pintu callback iPaymu-nya di sini ya Kak!
+            'api/ipaymu/callback' 
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })
     ->withSchedule(function (Schedule $schedule) {
-        // 🧪 MODE UJI COBA: Jalankan perintah satpam setiap 1 menit sekali
-        $schedule->command('bot:satpam-run')->everyMinute();
+        // 🌟 DIATUR SETIAP 1 JAM SEKALI & ANTI TABRAKAN
+        
+        // 1. Jalankan pengecekan status join per jam
+        $schedule->command('bot:check-joins')
+                 ->hourly()
+                 ->withoutOverlapping();
 
-        // 🟢 MODE PRODUKSI (Aktifkan ini nanti kalau sudah fix testingnya):
-        // $schedule->command('bot:satpam-run')->dailyAt('10:00'); // Reminder jam 10 pagi
-        // $schedule->command('bot:satpam-run')->hourly();        // Cek & Kick member per jam
+        // 2. Jalankan satpam pengingat & kick otomatis per jam
+        $schedule->command('bot:satpam-run')
+                 ->hourly()
+                 ->withoutOverlapping();
     })
     ->create();
