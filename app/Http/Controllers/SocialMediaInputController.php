@@ -58,10 +58,17 @@ class SocialMediaInputController extends Controller
         $uTable      = $config['userTable'];
         $sTable      = $config['socialTable'];
 
+        // Mengambil daftar user dari database masing-masing bot untuk dropdown form
         $users = $userModel::orderBy('name', 'asc')->get();
         
+        // 🌟 PERBAIKAN: Melakukan Select secara spesifik agar status & is_join dari tabel Telegram ikut terbawa
         $socialAccounts = $socialModel::join($uTable, "{$sTable}.telegram_id", '=', "{$uTable}.telegram_id")
-            ->select("{$sTable}.*", "{$uTable}.name as telegram_name")
+            ->select(
+                "{$sTable}.*", 
+                "{$uTable}.name as telegram_name",
+                "{$uTable}.status as telegram_status", // Mengamankan kolom status dari DB Telegram masing-masing
+                "{$uTable}.is_join as telegram_is_join" // Mengamankan kolom is_join dari DB Telegram masing-masing
+            )
             ->orderBy("{$sTable}.created_at", 'desc')
             ->get();
 
