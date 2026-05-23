@@ -108,7 +108,7 @@
 
                                             <button type="button" class="btn btn-warning btn-xs py-0 px-2 fw-bold text-dark" style="font-size:11px;" data-bs-toggle="modal" data-bs-target="#editModal{{ $account->id }}">Edit 📝</button>
 
-                                            <form action="{{ route('social.reject', $account->id) }}" method="POST" onsubmit="return confirm('Kirim notifikasi ke user bahwa nama akun TIDAK DITEMUKAN?');">
+                                            <form action="{{ route('social.reject', ['slug' => $slug, 'id' => $socialAccount->id]) }}" method="POST">
                                                 @csrf
                                                 <button type="submit" class="btn btn-danger btn-xs py-0 px-2 fw-bold" style="font-size:11px;">Tolak ❌</button>
                                             </form>
@@ -118,8 +118,8 @@
 
                                 <div class="modal fade" id="validModal{{ $account->id }}" tabindex="-1" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered modal-sm">
-                                        <div class="modal-content">
-                                            <form action="{{ route('social.validate', $account->id) }}" method="POST">
+                                        <div class="modal-content">                                            
+                                                <form action="{{ route('social.validate', ['slug' => $slug, 'id' => $socialAccount->id]) }}" method="POST">
                                                 @csrf
                                                 <div class="modal-header bg-success text-white py-2">
                                                     <h6 class="modal-title fw-bold">Konfirmasi Tanggal Masuk</h6>
@@ -143,7 +143,7 @@
                                 <div class="modal fade" id="editModal{{ $account->id }}" tabindex="-1" aria-hidden="true">
                                     <div class="modal-dialog modal-dialog-centered modal-sm">
                                         <div class="modal-content">
-                                            <form action="{{ route('social.update', $account->id) }}" method="POST">
+                                            <form action="{{ route('social.update', ['slug' => $slug, 'id' => $socialAccount->id]) }}" method="POST">
                                                 @csrf
                                                 <div class="modal-header bg-warning text-dark py-2">
                                                     <h6 class="modal-title fw-bold">Koreksi Data Pengikut</h6>
