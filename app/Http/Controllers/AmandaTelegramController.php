@@ -5,12 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
-// 🌟 MENGGUNAKAN MODEL KHUSUS AMANDA
 use App\Models\AmandaTelegramUser;
-use App\Models\AmandaSocialAccount;
 use App\Models\AmandaPayment;
-use Carbon\Carbon;
 
 class AmandaTelegramController extends Controller
 {
@@ -32,7 +28,6 @@ class AmandaTelegramController extends Controller
 
         $user = null;
         if ($telegramId) {
-            // Menggunakan AmandaTelegramUser
             $user = AmandaTelegramUser::firstOrCreate(
                 ['telegram_id' => $telegramId],
                 ['username' => $username, 'name' => $name, 'role' => ($telegramId == $adminId) ? 'admin' : 'member', 'status' => 'none']
@@ -50,60 +45,13 @@ class AmandaTelegramController extends Controller
 
             $this->answerCallbackQuery($callbackQueryId);
 
-            // Cek apakah user sudah pernah mengajukan (Menggunakan AmandaSocialAccount)
-            $isAlreadySubmitted = AmandaSocialAccount::where('telegram_id', $telegramId)->exists();
-
-            // --- PILIHAN 3 PAKET NOTA UTAMA ---
-            if ($callbackData === 'paket_1_minggu') {
-                $this->prosesPembayaran($chatId, $name, 15000, 'Paket Pahe (1 Minggu)', $telegramId, '1minggu');
-            }
-            elseif ($callbackData === 'paket_1_bulan') {
+            // --- PILIHAN PAKET NOTA UTAMA ---
+            if ($callbackData === 'paket_1_bulan') {
                 $this->prosesPembayaran($chatId, $name, 45000, 'Paket 1 Bulan', $telegramId, '1bulan');
             } 
             elseif ($callbackData === 'paket_3_bulan') {
                 $this->prosesPembayaran($chatId, $name, 120000, 'Paket 3 Bulan', $telegramId, '3bulan');
             } 
-            
-            // --- MUNCULKAN PILIHAN PLATFORM ---
-            elseif ($callbackData === 'sudah_langganan_sosmed') {
-                if ($isAlreadySubmitted) {
-                    $this->kirimPesan($chatId, "⏳ <b>DATA SEDANG DIPROSES</b>\n\nData Anda sedang mengantre untuk dicek Admin. Mohon ditunggu ya! 🙏");
-                    return response()->json(['status' => 'success'], 200);
-                }
-
-                $tombolSosmed = [
-                    'inline_keyboard' => [
-                        [
-                            ['text' => '📱 TikTok (TT)', 'callback_data' => 'pilih_tt'],
-                            ['text' => '📸 Instagram (IG)', 'callback_data' => 'pilih_ig']
-                        ],
-                        [
-                            ['text' => '🔵 Facebook (FB)', 'callback_data' => 'pilih_fb']
-                        ]
-                    ]
-                ];
-                $pesan = "📲 <b>PILIH PLATFORM SOSIAL MEDIA</b>\n\nSilakan pilih platform tempat Anda berlangganan konten Amanda:";
-                $this->kirimPesan($chatId, $pesan, $tombolSosmed);
-            }
-
-            // --- USER MEMILIH PLATFORM ---
-            elseif (in_array($callbackData, ['pilih_tt', 'pilih_ig', 'pilih_fb'])) {
-                if ($isAlreadySubmitted) {
-                    $this->kirimPesan($chatId, "⏳ <b>MOHON BERSABAR</b>\n\nPengajuan Anda sudah masuk antrean Admin.");
-                    return response()->json(['status' => 'success'], 200);
-                }
-
-                if ($callbackData === 'pilih_tt') {
-                    $user->update(['status' => 'waiting_tt']);
-                    $this->kirimPesan($chatId, "✍️ <b>INPUT AKUN TIKTOK</b>\n\nSilakan balas chat ini dengan mengetik <b>Nama Akun / Username TikTok</b> Anda:");
-                } elseif ($callbackData === 'pilih_ig') {
-                    $user->update(['status' => 'waiting_ig']);
-                    $this->kirimPesan($chatId, "✍️ <b>INPUT AKUN INSTAGRAM</b>\n\nSilakan balas chat ini dengan mengetik <b>Username / Nama Instagram</b> Anda:");
-                } elseif ($callbackData === 'pilih_fb') {
-                    $user->update(['status' => 'waiting_fb']);
-                    $this->kirimPesan($chatId, "✍️ <b>INPUT AKUN FACEBOOK</b>\n\nSilakan balas chat ini dengan mengetik <b>Nama Lengkap Akun Facebook</b> Anda:");
-                }
-            }
 
             return response()->json(['status' => 'success'], 200);
         }
@@ -127,146 +75,26 @@ class AmandaTelegramController extends Controller
 
             if ($chatType === 'private') {
                 $textLower = strtolower($text);
-                // Menggunakan AmandaSocialAccount
-                $isAlreadySubmitted = AmandaSocialAccount::where('telegram_id', $telegramId)->exists();
 
-                // --- 📸 SIMPAN GAMBAR BUKTI KE CACHE ---
-                if (isset($message['photo'])) {
-                    $photoArray = $message['photo'];
-                    $bestPhoto = end($photoArray);
-                    Cache::put('photo_amanda_' . $telegramId, $bestPhoto['file_id'], now()->addMinutes(30)); 
-                }
+                // --- INTERAKSI UTAMA /START ATAU CHAT ASAL ---
+                $user->update(['status' => 'none']);
 
-                // --- INTERAKSI UTAMA /START ---
-                if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
-                    $user->update(['status' => 'none']);
-
-                    if ($isAlreadySubmitted) {
-                        $this->kirimPesan($chatId, "⏳ <b>DATA SEDANG DIPROSES</b>\n\nHalo {$name}, pengajuan akun sosial media Anda sedang dalam antrean pengecekan Admin. Mohon ditunggu ya! 🙏");
-                        return response()->json(['status' => 'success'], 200);
-                    }
-
-                    // ✨ REVISI: PAKET PAHE 1 MINGGU SUDAH DIHAPUS TOTAL
-                    $tombolPaket = [
-                        'inline_keyboard' => [
-                            [
-                                ['text' => '📦 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
-                                ['text' => '📦 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
-                            ],
-                            [
-                                ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
-                            ]
-                        ]
-                    ];
-                    $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Amanda di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Amanda Zulfa</b>? Yuk, langsung gabung layanan langganan Amanda!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
-                    return $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
-                }
-
-                // ====================================================
-                // 🛠️ ALUR KETAT: USER INPUT -> MASUK DB SOCIAL -> NOTIF ADMIN
-                // ====================================================
-                if (in_array($user->status, ['waiting_tt', 'waiting_ig', 'waiting_fb']) && $text !== '') {
-                    
-                    if ($isAlreadySubmitted) {
-                        $user->update(['status' => 'none']);
-                        return response()->json(['status' => 'success'], 200);
-                    }
-
-                    $platformMapping = [
-                        'waiting_tt' => 'tiktok',
-                        'waiting_ig' => 'instagram',
-                        'waiting_fb' => 'facebook'
-                    ];
-                    
-                    $currentPlatform = $platformMapping[$user->status];
-                    $platformName = strtoupper($currentPlatform);
-
-                    try {
-                        // 1. INPUT KE DATABASE (Menggunakan AmandaSocialAccount)
-                        AmandaSocialAccount::updateOrCreate(
-                            ['telegram_id' => $telegramId, 'platform' => $currentPlatform],
-                            ['username_sosmed' => $text, 'persona_slug' => 'amandazulfa', 'joined_at' => now()]
-                        );
-
-                        // 2. Tarik Gambar Bukti dari Cache
-                        $savedPhotoId = Cache::pull('photo_amanda_' . $telegramId);
-
-                        // 3. Format pesan untuk Admin
-                        $pesanAdmin = "📢 <b>[NOTIFIKASI ASISTEN AMANDA]</b>\n\n" .
-                                      "Hi min, ada member baru daftar di <b>{$platformName}</b> Amanda dengan nama <code>{$text}</code>.\n\n" .
-                                      "👤 <b>Nama Tele User:</b> {$name}\n" .
-                                      "🆔 <b>ID Telegram:</b> <code>{$telegramId}</code>\n\n" .
-                                      "🔗 <b>Cek Sekarang:</b> https://bilikhukum.com/input/amandazulfa\n\n" .
-                                      "Tolong di cek dong min! 🦾";
-
-                        $tombolAdmin = [
-                            'inline_keyboard' => [
-                                [
-                                    ['text' => '💬 Chat Pengguna Langsung', 'url' => "tg://user?id={$telegramId}"]
-                                ]
-                            ]
-                        ];
-
-                        $botToken = env('TELEGRAM_BOT_TOKEN_AMANDA');
-
-                        // 4. KIRIM NOTIFIKASI KE ADMIN
-                        if ($savedPhotoId) { 
-                            $responseAdmin = Http::post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
-                                'chat_id' => $adminId,
-                                'photo'   => $savedPhotoId,
-                                'caption' => $pesanAdmin,
-                                'reply_markup' => json_encode($tombolAdmin),
-                                'parse_mode' => 'HTML'
-                            ]);
-                        } else {
-                            $responseAdmin = Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
-                                'chat_id' => $adminId,
-                                'text'    => $pesanAdmin,
-                                'reply_markup' => json_encode($tombolAdmin),
-                                'parse_mode' => 'HTML'
-                            ]);
-                        }
-
-                        if (!$responseAdmin->successful()) {
-                            $resBody = $responseAdmin->json();
-                            throw new \Exception("Gagal kirim notif ke Admin: " . ($resBody['description'] ?? 'Unknown'));
-                        }
-
-                        // 5. BALASAN KE USER
-                        $pesanSukses = "✅ <b>KONFIRMASI DIKIRIM!</b>\n\nData Akun Berhasil Dicatat:\n🌐 <b>Platform:</b> {$platformName}\n👤 <b>Nama Akun:</b> <code>{$text}</code>\n\n<i>Mohon tunggu sebentar ya, Kak. Tim Amanda akan segera memeriksa akun sosial media Anda untuk membuka akses grup! 🙏</i>";
-                        $this->kirimPesan($chatId, $pesanSukses);
-
-                        $user->update(['status' => 'none']);
-
-                    } catch (\Exception $e) {
-                        Log::error('Gagal Eksekusi Alur Amanda: ' . $e->getMessage());
-                        $this->kirimPesan($chatId, "❌ <b>SISTEM PROSES ERROR:</b>\n<code>" . $e->getMessage() . "</code>");
-                    }
-                    
-                    return response()->json(['status' => 'success'], 200);
-                }
-
-                // ====================================================
-                // FALLBACK MENU UTAMA (JIKA CHAT ACAK)
-                // ====================================================
-                if ($isAlreadySubmitted) {
-                    return response()->json(['status' => 'success'], 200);
-                }
-
-                // ✨ REVISI: PAKET PAHE 1 MINGGU SUDAH DIHAPUS TOTAL
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
                             ['text' => '📦 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
                             ['text' => '📦 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
-                        ],
-                        [
-                            ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
                         ]
                     ]
                 ];
-                $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan Amanda di bawah ini. Atau jika Anda sudah berlangganan di sosial media, klik tombol <b>Sudah Berlangganan</b> di bawah untuk menginput nama akun Anda!";
-                $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
+
+                if ($text === '/start' || $textLower === 'halo' || $textLower === 'p') {
+                    $pesanPenyambutan = "👋 <b>Halo {$name}! Terimakasih sudah menghubungi asisten Amanda di Telegram.</b>\n\nIngin akses konten premium eksklusif dari <b>Amanda Zulfa</b>? Yuk, langsung gabung layanan langganan Amanda!\n\n👇 Silakan pilih paket terbaikmu langsung dengan klik tombol di bawah ini:";
+                    return $this->kirimPesan($chatId, $pesanPenyambutan, $tombolPaket);
+                } else {
+                    $pesanDefault = "Halo {$name}, silakan pilih salah satu paket langganan Amanda di bawah ini untuk membuka akses ke grup premium:";
+                    $this->kirimPesan($chatId, $pesanDefault, $tombolPaket);
+                }
             }
         }
 
@@ -278,7 +106,6 @@ class AmandaTelegramController extends Controller
     // ==========================================  
     private function prosesPembayaran($chatId, $name, $amount, $packageName, $telegramId, $durationCode)
     {
-        // Menggunakan AmandaPayment
         $existingPayment = AmandaPayment::where('telegram_id', $telegramId)
             ->where('status', 'pending')
             ->first();
@@ -328,7 +155,6 @@ class AmandaTelegramController extends Controller
             if (isset($resData['Status']) && $resData['Status'] == 200) {
                 $paymentUrl = $resData['Data']['Url'] ?? '';
 
-                // Menggunakan AmandaPayment
                 AmandaPayment::updateOrCreate(
                     ['telegram_id' => $telegramId, 'status' => 'pending'],
                     [

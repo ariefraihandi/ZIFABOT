@@ -54,10 +54,10 @@ class TelegramController extends Controller
 
             // --- PILIHAN PAKET NOTA UTAMA ---
             if ($callbackData === 'paket_1_bulan') {
-                $this->prosesPembayaran($chatId, $name, 45000, 'Paket 1 Bulan', $telegramId, 1);
+                $this->prosesPembayaran($chatId, $name, 25000, 'Paket 1 Bulan', $telegramId, 1);
             } 
             elseif ($callbackData === 'paket_3_bulan') {
-                $this->prosesPembayaran($chatId, $name, 120000, 'Paket 3 Bulan', $telegramId, 3);
+                $this->prosesPembayaran($chatId, $name, 65000, 'Paket 3 Bulan', $telegramId, 3);
             } 
             
             // --- MUNCULKAN PILIHAN PLATFORM ---
