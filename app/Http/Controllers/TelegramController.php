@@ -253,8 +253,8 @@ class TelegramController extends Controller
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '📦 Paket 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
-                            ['text' => '📦 Paket 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
+                            ['text' => '📦 Paket 1 Bulan - Rp25k', 'callback_data' => 'paket_1_bulan'],
+                            ['text' => '📦 Paket 3 Bulan - Rp65k', 'callback_data' => 'paket_3_bulan']
                         ],
                         [
                             ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']

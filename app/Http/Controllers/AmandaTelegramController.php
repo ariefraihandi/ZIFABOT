@@ -82,8 +82,8 @@ class AmandaTelegramController extends Controller
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '📦 1 Bulan - Rp45k', 'callback_data' => 'paket_1_bulan'],
-                            ['text' => '📦 3 Bulan - Rp120k', 'callback_data' => 'paket_3_bulan']
+                            ['text' => '📦 1 Bulan - Rp25k', 'callback_data' => 'paket_1_bulan'],
+                            ['text' => '📦 3 Bulan - Rp65k', 'callback_data' => 'paket_3_bulan']
                         ]
                     ]
                 ];
