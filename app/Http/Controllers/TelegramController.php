@@ -54,10 +54,10 @@ class TelegramController extends Controller
 
             // --- PILIHAN PAKET NOTA UTAMA ---
             if ($callbackData === 'paket_1_bulan') {
-                $this->prosesPembayaran($chatId, $name, 25000, 'Paket 1 Bulan', $telegramId, 1);
+                $this->prosesPembayaran($chatId, $name, 35000, 'Paket 1 Bulan', $telegramId, 1);
             } 
             elseif ($callbackData === 'paket_3_bulan') {
-                $this->prosesPembayaran($chatId, $name, 65000, 'Paket 3 Bulan', $telegramId, 3);
+                $this->prosesPembayaran($chatId, $name, 90000, 'Paket 3 Bulan', $telegramId, 3);
             } 
             
             // --- MUNCULKAN PILIHAN PLATFORM ---
@@ -144,8 +144,8 @@ class TelegramController extends Controller
                     $tombolPaket = [
                         'inline_keyboard' => [
                             [
-                                ['text' => '📦 1 Bulan - Rp25k', 'callback_data' => 'paket_1_bulan'],
-                                ['text' => '📦 3 Bulan - Rp65k', 'callback_data' => 'paket_3_bulan']
+                                ['text' => '📦 1 Bulan - Rp35k', 'callback_data' => 'paket_1_bulan'],
+                                ['text' => '📦 3 Bulan - Rp90k', 'callback_data' => 'paket_3_bulan']
                             ],
                             [
                                 ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
@@ -253,8 +253,8 @@ class TelegramController extends Controller
                 $tombolPaket = [
                     'inline_keyboard' => [
                         [
-                            ['text' => '📦 Paket 1 Bulan - Rp25k', 'callback_data' => 'paket_1_bulan'],
-                            ['text' => '📦 Paket 3 Bulan - Rp65k', 'callback_data' => 'paket_3_bulan']
+                            ['text' => '📦 Paket 1 Bulan - Rp35k', 'callback_data' => 'paket_1_bulan'],
+                            ['text' => '📦 Paket 3 Bulan - Rp90k', 'callback_data' => 'paket_3_bulan']
                         ],
                         [
                             ['text' => '✅ Sudah Berlangganan di FB/IG/TikTok', 'callback_data' => 'sudah_langganan_sosmed']
